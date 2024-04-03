@@ -1,6 +1,6 @@
 # import or_gym
 # from or_gym.utils import create_env
-from TSPEnv import TSPEnv
+from TSPEnv import TSPEnv, save_steps_log, save_dist_log, save_solved_log
 import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 # from ray.rllib.algorithms import ppo
 import tianshou as ts
 
+# print([7+1]+[100]*7*2)
 
 gym.envs.register(
      id='TSPEnv-v0',
@@ -43,6 +44,11 @@ class Net(nn.Module):
 
 env = TSPEnv()
 
+
+# env.render()
+
+# plt.pause(10)
+
 state_shape = env.observation_space.shape or env.observation_space.n
 action_shape = env.action_space.shape or env.action_space.n
 net = Net(state_shape, action_shape)
@@ -64,7 +70,7 @@ result = ts.trainer.OffpolicyTrainer(
     policy=policy,
     train_collector=train_collector,
     test_collector=test_collector,
-    max_epoch=100, 
+    max_epoch=25, 
     step_per_epoch=10000,
     step_per_collect=10,
     update_per_step=0.1, episode_per_test=100, batch_size=64,
@@ -72,7 +78,11 @@ result = ts.trainer.OffpolicyTrainer(
     test_fn=lambda epoch, env_step: policy.set_eps(0.05),
     stop_fn=lambda mean_rewards: mean_rewards >= env.spec.reward_threshold
 ).run()
-print(f'Finished training! Use {result["duration"]}')
+print(f'Finished training! Used {result["duration"]}')
+
+save_steps_log()
+save_dist_log()
+save_solved_log()
 
 policy.eval()
 policy.set_eps(0.05)
