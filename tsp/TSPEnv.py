@@ -50,11 +50,11 @@ class TSPEnv(gym.Env):
         have been reached.
     '''
     def __init__(self, *args, **kwargs):
-        self.N = 5
+        self.N = 7
         self.move_cost = -1
         self.invalid_action_cost = -100
         self.mask = False
-        self.spec = SimpleNamespace(reward_threshold=1300)
+        self.spec = SimpleNamespace(reward_threshold=2000)
         self.render_ready = False
         utils.assign_env_config(self, kwargs)
 
@@ -94,8 +94,9 @@ class TSPEnv(gym.Env):
         # else:
         self.path.append(action)
         dist = np.sqrt(self._node_sqdist(self.current_node, action))
-        self.dist_sum += dist
-        reward = -dist / 10
+        self.dist_sum += dist / 3
+        reward = -dist
+        # reward = 0
         # print(f"From: {self.current_node}; To: {action}; Cost: {reward}; Stall? {action == self.current_node}; Repeat? {self.visit_log[action] > 1}")
         # print(f"Sub: {reward}")
         if action == self.current_node:
