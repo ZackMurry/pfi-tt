@@ -52,7 +52,7 @@ env = TSPEnv()
 state_shape = env.observation_space.shape or env.observation_space.n
 action_shape = env.action_space.shape or env.action_space.n
 net = Net(state_shape, action_shape)
-optim = torch.optim.Adam(net.parameters(), lr=1e-3)
+optim = torch.optim.Adam(net.parameters(), lr=2e-3)
 
 policy = ts.policy.DQNPolicy(
     model=net,
@@ -70,7 +70,7 @@ result = ts.trainer.OffpolicyTrainer(
     policy=policy,
     train_collector=train_collector,
     test_collector=test_collector,
-    max_epoch=25, 
+    max_epoch=50, 
     step_per_epoch=10000,
     step_per_collect=10,
     update_per_step=0.1, episode_per_test=100, batch_size=64,
