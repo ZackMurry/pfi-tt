@@ -5,6 +5,7 @@ from or_gym import utils
 from copy import copy, deepcopy
 import matplotlib.pyplot as plt
 from time import sleep
+from datetime import datetime
 from types import SimpleNamespace
 
 steps_log = []
@@ -50,11 +51,12 @@ class TSPEnv(gym.Env):
         have been reached.
     '''
     def __init__(self, *args, **kwargs):
-        self.N = 7
+        self.N = 5
+        self.dist_factor = 1/3
         self.move_cost = -1
         self.invalid_action_cost = -100
         self.mask = False
-        self.spec = SimpleNamespace(reward_threshold=2000)
+        self.spec = SimpleNamespace(reward_threshold=1300)
         self.render_ready = False
         utils.assign_env_config(self, kwargs)
 
@@ -94,8 +96,8 @@ class TSPEnv(gym.Env):
         # else:
         self.path.append(action)
         dist = np.sqrt(self._node_sqdist(self.current_node, action))
-        self.dist_sum += dist / 3
-        reward = -dist
+        self.dist_sum += dist
+        reward = -dist * self.dist_factor
         # reward = 0
         # print(f"From: {self.current_node}; To: {action}; Cost: {reward}; Stall? {action == self.current_node}; Repeat? {self.visit_log[action] > 1}")
         # print(f"Sub: {reward}")
@@ -124,8 +126,26 @@ class TSPEnv(gym.Env):
             # print("DONE!")
             reward += 1000
         if self.step_count >= self.step_limit:
+            self.path.append(path[0])
+            dist = np.sqrt(self._node_sqdist(self.current_node, action))
+            self.dist_sum += dist
+            reward -= dist * self.dist_factor
             done = True
             
+        if done and self.render_ready:
+            print(f"Locations: {self.locations}")
+            print(f"Path: {self.path}")
+            fig, ax = plt.subplots(figsize=(12,8))
+            for n in range(self.N):
+                pt = self.locations[n]
+                ax.scatter(pt[0], pt[1], color='black', s=300)
+                ax.annotate(r"$N_{:d}$".format(n), xy=(pt[0]+0.4, pt[1]+0.05), zorder=2)
+            for i in range(len(self.path) - 1):
+                ax.plot([self.locations[self.path[i]][0], self.locations[self.path[i+1]][0]],
+                    [self.locations[self.path[i]][1], self.locations[self.path[i+1]][1]], 'bo', linestyle='solid')
+            current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            fig.savefig(f"{self.N}-solution-{current_datetime}.png")
+
         # if done:
         #     print(f"Num steps: {self.step_count}")
         # self.plot_network()
@@ -248,16 +268,16 @@ class TSPEnv(gym.Env):
     
     def render(self):
         if not self.render_ready:
-            print('first render!')
-            # self.reset()
-            plt.ion()
-            self.fig, self.ax = plt.subplots(figsize=(12,8))
-            self.coords = self._generate_coordinates()
-            self.ax.scatter(self.coords[0], self.coords[1], s=40)
+        #     print('first render!')
+        #     # self.reset()
+        #     plt.ion()
+        #     self.fig, self.ax = plt.subplots(figsize=(12,8))
+        #     self.coords = self._generate_coordinates()
+        #     self.ax.scatter(self.coords[0], self.coords[1], s=40)
             self.render_ready = True
-            plt.pause(3)
-        print('render!')
-        self.plot_network()
+        #     plt.pause(3)
+        # print('render!')
+        #self.plot_network()
 
 
 def save_steps_log():

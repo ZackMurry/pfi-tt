@@ -70,7 +70,7 @@ result = ts.trainer.OffpolicyTrainer(
     policy=policy,
     train_collector=train_collector,
     test_collector=test_collector,
-    max_epoch=100, 
+    max_epoch=25, 
     step_per_epoch=10000,
     step_per_collect=10,
     update_per_step=0.1, episode_per_test=100, batch_size=64,
@@ -78,7 +78,7 @@ result = ts.trainer.OffpolicyTrainer(
     test_fn=lambda epoch, env_step: policy.set_eps(0.05),
     stop_fn=lambda mean_rewards: mean_rewards >= env.spec.reward_threshold
 ).run()
-print(f'Finished training! Used {result["duration"]}')
+print(f'Finished training! Took {result["duration"]}')
 
 save_steps_log()
 save_dist_log()
@@ -87,8 +87,7 @@ save_solved_log()
 policy.eval()
 policy.set_eps(0.05)
 collector = ts.data.Collector(policy, env, exploration_noise=True)
-collector.collect(n_episode=1, render=1)
-
+collector.collect(n_episode=5, render=1)
 
 
 # ray.init()
