@@ -52,15 +52,16 @@ class TSPEnv(gym.Env):
     '''
     def __init__(self, *args, **kwargs):
         self.N = 5
-        self.dist_factor = 1/3
+        self.dist_factor = 10
         self.move_cost = -1
         self.invalid_action_cost = -100
         self.mask = False
-        self.spec = SimpleNamespace(reward_threshold=1300)
+        self.spec = SimpleNamespace(reward_threshold=1600)
         self.render_ready = False
         utils.assign_env_config(self, kwargs)
 
         self.locations = []
+        self.min_dist = -1
         self.step_count = 0
         self.nodes = np.arange(self.N)
         self.step_limit = 2*self.N
@@ -95,7 +96,8 @@ class TSPEnv(gym.Env):
         # Move to new node
         # else:
         self.path.append(action)
-        dist = np.sqrt(self._node_sqdist(self.current_node, action))
+        # Todo: reward based on comparison to minimum path instead of absolute distance (varies too much)
+        dist = np.sqrt(self._node_sqdist(self.current_node, action)) / self.min_dist
         self.dist_sum += dist
         reward = -dist * self.dist_factor
         # reward = 0
@@ -121,15 +123,13 @@ class TSPEnv(gym.Env):
         unique_visits = sum([1 if v > 0 else 0 
             for v in self.visit_log.values()])
         if unique_visits >= self.N:
-            done = True
-            # print(f"DONE! {self.path}")
-            # print("DONE!")
-            reward += 1000
-        if self.step_count >= self.step_limit:
-            self.path.append(path[0])
+            self.path.append(self.path[0])
             dist = np.sqrt(self._node_sqdist(self.current_node, action))
             self.dist_sum += dist
             reward -= dist * self.dist_factor
+            done = True
+            reward += 500
+        if self.step_count >= self.step_limit:
             done = True
             
         if done and self.render_ready:
@@ -181,6 +181,9 @@ class TSPEnv(gym.Env):
         self.locations.clear()
         for i in range(self.N):
             self.locations.append((np.random.randint(0,100), np.random.randint(0,100)))
+        self.min_dist = self.find_min_dist([self.current_node])
+        # print(self.min_dist)
+        
 
     def _update_state(self):
         # node_connections = self.adjacency_matrix.copy()
@@ -279,6 +282,22 @@ class TSPEnv(gym.Env):
         # print('render!')
         #self.plot_network()
 
+    def find_min_dist(self, arr):
+        low = 9999999
+        low_i = -1
+        unique = 0
+        for i in range(self.N):
+            if arr.count(i) == 0:
+                md = self.find_min_dist(arr + [i]) + np.sqrt(self._node_sqdist(arr[-1], i))
+                if md < low:
+                    low = md
+                    low_i = i
+            else:
+                unique += 1
+        if unique == self.N:
+            return np.sqrt(self._node_sqdist(arr[-1] ,arr[0]))
+        return low
+                
 
 def save_steps_log():
     # print(steps_log)

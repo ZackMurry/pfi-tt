@@ -52,7 +52,7 @@ env = TSPEnv()
 state_shape = env.observation_space.shape or env.observation_space.n
 action_shape = env.action_space.shape or env.action_space.n
 net = Net(state_shape, action_shape)
-optim = torch.optim.Adam(net.parameters(), lr=2e-3)
+optim = torch.optim.Adam(net.parameters(), lr=1e-3)
 
 policy = ts.policy.DQNPolicy(
     model=net,
