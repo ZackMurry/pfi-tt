@@ -19,8 +19,8 @@ gym.envs.register(
 )
 
 print(ts.__version__)
-train_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
-test_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
+train_envs = ts.env.SubprocVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
+test_envs = ts.env.SubprocVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
 
 import torch, numpy as np
 from torch import nn
