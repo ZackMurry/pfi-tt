@@ -1,7 +1,6 @@
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
-from or_gym import utils
 from copy import copy, deepcopy
 import matplotlib.pyplot as plt
 from time import sleep
@@ -58,7 +57,6 @@ class TSPEnv(gym.Env):
         self.mask = False
         self.spec = SimpleNamespace(reward_threshold=1600)
         self.render_ready = False
-        utils.assign_env_config(self, kwargs)
 
         self.locations = []
         self.min_dist = -1
