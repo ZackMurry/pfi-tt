@@ -19,8 +19,10 @@ gym.envs.register(
 )
 
 print(ts.__version__)
-train_envs = ts.env.SubprocVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
-test_envs = ts.env.SubprocVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
+# train_envs = ts.env.SubprocVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
+# test_envs = ts.env.SubprocVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
+train_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
+test_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
 
 import torch, numpy as np
 from torch import nn
@@ -50,6 +52,7 @@ env = TSPEnv()
 # plt.pause(10)
 
 state_shape = env.observation_space.shape or env.observation_space.n
+print(f'State shape: {state_shape}')
 action_shape = env.action_space.shape or env.action_space.n
 net = Net(state_shape, action_shape)
 optim = torch.optim.Adam(net.parameters(), lr=2e-3)

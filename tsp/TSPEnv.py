@@ -51,7 +51,7 @@ class TSPEnv(gym.Env):
     '''
     def __init__(self, *args, **kwargs):
         self.N = 5
-        self.dist_factor = 10
+        self.dist_factor = 20
         self.move_cost = -1
         self.invalid_action_cost = -100
         self.mask = False
@@ -64,8 +64,11 @@ class TSPEnv(gym.Env):
         self.nodes = np.arange(self.N)
         self.step_limit = 2*self.N
         self.obs_dim = 1+self.N**2
-        obs_space = spaces.Box(-1, self.N, shape=(self.obs_dim,), dtype=np.int32)
-        self.observation_space = spaces.MultiDiscrete([self.N+1] + [self.N*2]*self.N + [100]*self.N*2)
+        # obs_space = spaces.Box(-1, self.N, shape=(self.obs_dim,), dtype=np.int32)
+        self.observation_space = spaces.MultiDiscrete([self.N+1] + [2]*self.N + [200]*(self.N**2))
+        # Example: [ 0  1  0  0  0  0  0 54 77 94 79 54  0 23 40 41 77 23  0 17 28 94 40 17 0 27 79 41 28 27  0]
+        # print(self.observation_space)
+
         self.action_space = spaces.Discrete(self.N)
         self.path = []
         self.dist_sum = 0
@@ -76,6 +79,7 @@ class TSPEnv(gym.Env):
         self.path.append(action)
         # Todo: reward based on comparison to minimum path instead of absolute distance (varies too much)
         dist = np.sqrt(self._node_sqdist(self.current_node, action)) / self.min_dist
+        # dist = self._node_dist_manhattan(self.current_node, action) / self.min_dist
         self.dist_sum += dist
         reward = -dist * self.dist_factor
         # reward = 0
@@ -116,7 +120,8 @@ class TSPEnv(gym.Env):
             fig, ax = plt.subplots(figsize=(12,8))
             for n in range(self.N):
                 pt = self.locations[n]
-                ax.scatter(pt[0], pt[1], color='black', s=300)
+                clr = 'green' if n == 0 else 'black'
+                ax.scatter(pt[0], pt[1], color=clr, s=300)
                 ax.annotate(r"$N_{:d}$".format(n), xy=(pt[0]+0.4, pt[1]+0.05), zorder=2)
             for i in range(len(self.path) - 1):
                 ax.plot([self.locations[self.path[i]][0], self.locations[self.path[i+1]][0]],
@@ -124,7 +129,18 @@ class TSPEnv(gym.Env):
             current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             fig.savefig(f"{self.N}-solution-{current_datetime}.png")
         return self.state, reward, done, (self.step_count >= self.step_limit), {}
-        
+    
+    def _node_dist(self, a, b):
+        return np.sqrt(self._node_sqdist(a, b))
+
+    def _node_dist_manhattan(self, a, b):
+        apt = self.locations[a]
+        bpt = self.locations[b]
+        dx = apt[0] - bpt[0]
+        dy = apt[1] - bpt[1]
+        return abs(dx) + abs(dy)
+
+
     def _node_sqdist(self, a, b):
         apt = self.locations[a]
         bpt = self.locations[b]
@@ -156,14 +172,25 @@ class TSPEnv(gym.Env):
         for i in range(self.N):
             self.locations.append((np.random.randint(0,100), np.random.randint(0,100)))
         self.min_dist = self.find_min_dist([self.current_node])
-        # print(self.min_dist)
+        # print(f"Min dist: {self.min_dist}")
         
 
     def _update_state(self):
         visit_list = [min(self.visit_log[i], 1) for i in range(self.N)]
-        state = np.array([self.current_node] + visit_list + [self.locations[i][0] for i in range(self.N)] + [self.locations[i][1] for i in range(self.N)])
+        dist_matrix = self.generate_1d_distance_matrix()
+        state = np.array([self.current_node] + visit_list + dist_matrix)
+        # print(f'state: {state}')
         return state
             
+    def generate_1d_distance_matrix(self):
+        matrix = []
+        # max_dist = 100 * np.sqrt(2)
+        for i in range(self.N):
+            for j in range(self.N):
+                matrix.append(self._node_dist_manhattan(i, j))
+        # print(f"matrix: {matrix}")
+        return matrix
+
     def _generate_coordinates(self):
         n = np.linspace(0, 2*np.pi, self.N+1)
         x = np.cos(n)
@@ -191,14 +218,18 @@ class TSPEnv(gym.Env):
         unique = 0
         for i in range(self.N):
             if arr.count(i) == 0:
-                md = self.find_min_dist(arr + [i]) + np.sqrt(self._node_sqdist(arr[-1], i))
+                md = self.find_min_dist(arr + [i]) + self._node_dist_manhattan(arr[-1], i) #np.sqrt(self._node_sqdist(arr[-1], i))
+                # if md == 0:
+                #     print(f'arr: {arr}, i: {i}, md: {md}')
                 if md < low:
                     low = md
                     low_i = i
             else:
                 unique += 1
         if unique == self.N:
-            return np.sqrt(self._node_sqdist(arr[-1] ,arr[0]))
+            # print(f'min path: {arr}')
+            # return np.sqrt(self._node_sqdist(arr[-1] ,arr[0]))
+            return self._node_dist_manhattan(arr[-1], arr[0])
         return low
                 
 
