@@ -50,12 +50,12 @@ class TSPEnv(gym.Env):
         have been reached.
     '''
     def __init__(self, *args, **kwargs):
-        self.N = 5
-        self.dist_factor = 20
+        self.N = 7
+        self.dist_factor = 3
         self.move_cost = -1
         self.invalid_action_cost = -100
         self.mask = False
-        self.spec = SimpleNamespace(reward_threshold=1600)
+        self.spec = SimpleNamespace(reward_threshold=1000)
         self.render_ready = False
 
         self.locations = []

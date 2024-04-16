@@ -73,7 +73,7 @@ result = ts.trainer.OffpolicyTrainer(
     policy=policy,
     train_collector=train_collector,
     test_collector=test_collector,
-    max_epoch=50, 
+    max_epoch=100, 
     step_per_epoch=10000,
     step_per_collect=10,
     update_per_step=0.1, episode_per_test=100, batch_size=64,
