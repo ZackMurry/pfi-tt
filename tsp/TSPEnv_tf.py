@@ -1,17 +1,22 @@
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
+
+from tf_agents.environments import py_environment
+from tf_agents.specs import array_spec
 from copy import copy, deepcopy
 import matplotlib.pyplot as plt
 from time import sleep
 from datetime import datetime
 from types import SimpleNamespace
+from tf_agents.trajectories import time_step as ts
+from tf_agents.trajectories import TimeStep
 
 steps_log = []
 dist_log = []
 solved_log = []
 
-class TSPEnv(gym.Env):
+class TSPEnv(py_environment.PyEnvironment):
     '''
     Bi-directional connections and uniform cost
 
@@ -50,12 +55,12 @@ class TSPEnv(gym.Env):
         have been reached.
     '''
     def __init__(self, *args, **kwargs):
-        self.N = 7
+        self.N = 5
         self.dist_factor = 20
         self.move_cost = -1
         self.invalid_action_cost = -100
         self.mask = False
-        self.spec = SimpleNamespace(reward_threshold=3500)
+        self.spec = SimpleNamespace(reward_threshold=1300)
         self.render_ready = False
 
         self.locations = []
@@ -65,21 +70,34 @@ class TSPEnv(gym.Env):
         self.step_limit = 2*self.N
         self.obs_dim = 1+self.N**2
         # obs_space = spaces.Box(-1, self.N, shape=(self.obs_dim,), dtype=np.int32)
-        self.observation_space = spaces.MultiDiscrete([self.N+1] + [2]*self.N + [200]*(self.N*(self.N-1)//2))
+        self.observation_space = spaces.MultiDiscrete([self.N+1] + [2]*self.N + [200]*(self.N**2))
+        arr_len = 1 + self.N + self.N**2
+        self._observation_spec = array_spec.BoundedArraySpec(
+            shape=(arr_len,), dtype=np.int32, minimum=0, maximum=([1] + [2]*self.N + [200]*(self.N**2)), name='observation'
+        )
         # Example: [ 0  1  0  0  0  0  0 54 77 94 79 54  0 23 40 41 77 23  0 17 28 94 40 17 0 27 79 41 28 27  0]
         # print(self.observation_space)
 
         self.action_space = spaces.Discrete(self.N)
+        self._action_spec = array_spec.BoundedArraySpec(
+            shape=(1,), dtype=np.int32, minimum=0, maximum=self.N-1, name='action'
+        )
         self.path = []
         self.dist_sum = 0
         self.reset()
-        
-    def _STEP(self, action):
+
+    def action_spec(self):
+        return self._action_spec
+    
+    def observation_spec(self):
+        return self._observation_spec
+
+    def _step(self, action):
         # print(action)
         done = False
         self.path.append(action)
         # Todo: reward based on comparison to minimum path instead of absolute distance (varies too much)
-        dist = self._node_dist_manhattan(self.current_node, action) / self.min_dist
+        dist = np.sqrt(self._node_sqdist(self.current_node, action)) / self.min_dist
         # dist = self._node_dist_manhattan(self.current_node, action) / self.min_dist
         self.dist_sum += dist
         reward = -dist * self.dist_factor
@@ -107,18 +125,14 @@ class TSPEnv(gym.Env):
             for v in self.visit_log.values()])
         if unique_visits >= self.N:
             self.path.append(self.path[0])
-            # dist = np.sqrt(self._node_sqdist(self.current_node, action))
-            dist = np.sqrt(self._node_sqdist(self.current_node, action)) / self.min_dist
+            dist = np.sqrt(self._node_sqdist(self.current_node, action))
             self.dist_sum += dist
             reward -= dist * self.dist_factor
             done = True
-            reward += 1000 - 500 * (self.dist_sum / self.min_dist)
-            if self.dist_sum <= self.min_dist * 1.05:
-                reward += 1000
+            reward += 500
         if self.step_count >= self.step_limit:
             done = True
-        
-
+            
         if done and self.render_ready:
             print(f"Locations: {self.locations}")
             print(f"Path: {self.path}")
@@ -133,7 +147,10 @@ class TSPEnv(gym.Env):
                     [self.locations[self.path[i]][1], self.locations[self.path[i+1]][1]], 'bo', linestyle='solid')
             current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             fig.savefig(f"{self.N}-solution-{current_datetime}.png")
-        return self.state, reward, done, (self.step_count >= self.step_limit), {}
+        # return self.state, reward, done, (self.step_count >= self.step_limit), {}
+        if done:
+            return ts.termination(self.state, reward)
+        return ts.transition(self.state, reward=reward, discount=1.0)
     
     def _node_dist(self, a, b):
         return np.sqrt(self._node_sqdist(a, b))
@@ -153,10 +170,10 @@ class TSPEnv(gym.Env):
         dy = apt[1] - bpt[1]
         return dx*dx + dy*dy
 
-    def _RESET(self):
+    def _reset(self):
         if self.step_count > 0:
             steps_log.append(self.step_count)
-            if self.step_count < self.N*2:
+            if self.step_count < 10:
                 solved_log.append(1)
                 dist_log.append(self.dist_sum)
             else:
@@ -170,7 +187,8 @@ class TSPEnv(gym.Env):
         self._generate_locations()
         self.path = [self.current_node]
         self.state = self._update_state()
-        return self.state, {}
+        # return self.state, {}
+        return ts.restart(self.state)
         
     def _generate_locations(self):
         self.locations.clear()
@@ -183,7 +201,7 @@ class TSPEnv(gym.Env):
     def _update_state(self):
         visit_list = [min(self.visit_log[i], 1) for i in range(self.N)]
         dist_matrix = self.generate_1d_distance_matrix()
-        state = np.array([self.current_node] + visit_list + dist_matrix)
+        state = np.array([self.current_node] + visit_list + dist_matrix, dtype=np.int32)
         # print(f'state: {state}')
         return state
             
@@ -191,7 +209,7 @@ class TSPEnv(gym.Env):
         matrix = []
         # max_dist = 100 * np.sqrt(2)
         for i in range(self.N):
-            for j in range(i+1, self.N):
+            for j in range(self.N):
                 matrix.append(self._node_dist_manhattan(i, j))
         # print(f"matrix: {matrix}")
         return matrix
@@ -205,13 +223,6 @@ class TSPEnv(gym.Env):
     def _get_node_distance(self, N0, N1):
         return np.sqrt(np.power(N0[0] - N1[0], 2) + np.power(N0[1] - N1[1], 2))
             
-    def step(self, action):
-        if self.render_ready:
-            print(f"moving to {action}")
-        return self._STEP(action)
-
-    def reset(self, seed=None, options=None):
-        return self._RESET()
     
     def render(self):
         if not self.render_ready:
@@ -240,23 +251,41 @@ class TSPEnv(gym.Env):
     def seed(self, seed):
         np.random.seed(seed)
 
-
-def save_log(data, name):
-    if len(data) == 0:
-        print(f'{name} data len is 0')
-        return
+def save_steps_log():
+    # print(steps_log)
     avgs = []
     num_pts = 100
     for i in range(num_pts):
         sum = 0
-        for i in range(len(data)//num_pts * i, len(data)//num_pts * (i+1)):
-            sum += data[i]
-        avgs.append(sum / (len(data) // num_pts))
+        for i in range(len(steps_log)//num_pts * i, len(steps_log)//num_pts * (i+1)):
+            sum += steps_log[i]
+        avgs.append(sum / (len(steps_log) // num_pts))
     fig, ax = plt.subplots()
     ax.scatter(range(num_pts), avgs)
-    fig.savefig(f'{data}_log.png')
+    fig.savefig('steps_log.png')
 
-def save_logs():
-    save_log(steps_log, 'steps')
-    save_log(dist_log, 'dist')
-    save_log(solved_log, 'solved')
+def save_dist_log():
+    # print(steps_log)
+    avgs = []
+    num_pts = 100
+    for i in range(num_pts):
+        sum = 0
+        for i in range(len(dist_log)//num_pts * i, len(dist_log)//num_pts * (i+1)):
+            sum += dist_log[i]
+        avgs.append(sum / (len(dist_log) // num_pts))
+    fig, ax = plt.subplots()
+    ax.scatter(range(num_pts), avgs)
+    fig.savefig('dist_log.png')
+
+def save_solved_log():
+    # print(steps_log)
+    avgs = []
+    num_pts = 100
+    for i in range(num_pts):
+        sum = 0
+        for i in range(len(solved_log)//num_pts * i, len(solved_log)//num_pts * (i+1)):
+            sum += solved_log[i]
+        avgs.append(sum / (len(solved_log) // num_pts))
+    fig, ax = plt.subplots()
+    ax.scatter(range(num_pts), avgs)
+    fig.savefig('solved_log.png')
