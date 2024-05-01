@@ -8,8 +8,11 @@ import matplotlib.pyplot as plt
 # import ray
 # from ray.rllib.algorithms import ppo
 import tianshou as ts
+import torch
 
 # print([7+1]+[100]*7*2)
+
+torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
 gym.envs.register(
      id='TSPEnv-v0',
@@ -19,10 +22,14 @@ gym.envs.register(
 )
 
 print(ts.__version__)
+print(f"CUDA: {torch.cuda.is_available()}")
+device = torch.device('cuda')
 # import envpool
 # train_envs = envpool.make_gymnasium("TSPEnv-v0", num_envs=10)
 # test_envs = envpool.make_gymnasium("TSPEnv-v0", num_envs=100)
 
+# train_envs = ts.env.ShmemVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
+# test_envs = ts.env.ShmemVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
 train_envs = ts.env.SubprocVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
 test_envs = ts.env.SubprocVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
 # train_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
@@ -38,12 +45,15 @@ class Net(nn.Module):
             nn.Linear(np.prod(state_shape), 128), nn.ReLU(inplace=True),
             nn.Linear(128, 128), nn.ReLU(inplace=True),
             nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, np.prod(action_shape)),
+            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
+            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
+            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
+            nn.Linear(128, np.prod(action_shape), device=device),
         )
 
     def forward(self, obs, state=None, info={}):
         if not isinstance(obs, torch.Tensor):
-            obs = torch.tensor(obs, dtype=torch.float)
+            obs = torch.tensor(obs, dtype=torch.float, device=device)
         batch = obs.shape[0]
         logits = self.model(obs.view(batch, -1))
         return logits, state
@@ -54,8 +64,14 @@ state_shape = env.observation_space.shape or env.observation_space.n
 print(f'State shape: {state_shape}')
 action_shape = env.action_space.shape or env.action_space.n
 net = Net(state_shape, action_shape)
+
+print(next(net.parameters()).is_cuda) # False
+net.to(device)
+print(next(net.parameters()).is_cuda) # True
+
 optim = torch.optim.Adam(net.parameters(), lr=1e-3)
 
+# policy  = ts.policy.PPOPolicy(
 policy = ts.policy.DQNPolicy(
     model=net,
     optim=optim,
@@ -63,7 +79,12 @@ policy = ts.policy.DQNPolicy(
     discount_factor=0.9,
     estimation_step=3,
     target_update_freq=320
-)
+).to(device)
+
+print(torch.cuda.get_device_name(0))
+print('Memory Usage:')
+print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**3,1), 'GB')
+print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')
 
 train_collector = ts.data.Collector(policy, train_envs, ts.data.VectorReplayBuffer(20000, 10), exploration_noise=True)
 test_collector = ts.data.Collector(policy, test_envs, exploration_noise=True)
@@ -72,7 +93,7 @@ result = ts.trainer.OffpolicyTrainer(
     policy=policy,
     train_collector=train_collector,
     test_collector=test_collector,
-    max_epoch=50, 
+    max_epoch=70, 
     step_per_epoch=10000,
     step_per_collect=10,
     update_per_step=0.1, episode_per_test=100, batch_size=64,

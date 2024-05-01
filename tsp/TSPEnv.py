@@ -50,12 +50,12 @@ class TSPEnv(gym.Env):
         have been reached.
     '''
     def __init__(self, *args, **kwargs):
-        self.N = 7
-        self.dist_factor = 20
+        self.N = 5
+        self.dist_factor = 7
         self.move_cost = -1
         self.invalid_action_cost = -100
         self.mask = False
-        self.spec = SimpleNamespace(reward_threshold=3500)
+        self.spec = SimpleNamespace(reward_threshold=2000)
         self.render_ready = False
 
         self.locations = []
@@ -79,25 +79,25 @@ class TSPEnv(gym.Env):
         done = False
         self.path.append(action)
         # Todo: reward based on comparison to minimum path instead of absolute distance (varies too much)
-        dist = self._node_dist_manhattan(self.current_node, action) / self.min_dist
+        dist = self._node_dist_manhattan(self.current_node, action)
         # dist = self._node_dist_manhattan(self.current_node, action) / self.min_dist
         self.dist_sum += dist
-        reward = -dist * self.dist_factor
+        reward = -(dist/self.min_dist) * self.dist_factor
         # reward = 0
         # print(f"From: {self.current_node}; To: {action}; Cost: {reward}; Stall? {action == self.current_node}; Repeat? {self.visit_log[action] > 1}")
         # print(f"Sub: {reward}")
-        if action == self.current_node:
-            # print('stall')
-            reward -= 100
+        # if action == self.current_node:
+        #     # print('stall')
+        #     reward -= 1
         if self.visit_log[action] >= 1:
             # print('repeat')
-            reward -= 100
+            reward -= 10
         # print(f"subtracting {reward}")
         self.current_node = action
         # print(action)
         if self.visit_log[self.current_node] == 0:
             # print('new node')
-            reward += 100
+            reward += 1
         self.visit_log[self.current_node] += 1
             
         self.state = self._update_state()
@@ -112,16 +112,18 @@ class TSPEnv(gym.Env):
             self.dist_sum += dist
             reward -= dist * self.dist_factor
             done = True
-            reward += 1000 - 500 * (self.dist_sum / self.min_dist)
-            if self.dist_sum <= self.min_dist * 1.05:
-                reward += 1000
+            reward += 20 - 5 * (self.dist_sum / self.min_dist)
+            # if self.dist_sum <= self.min_dist * 1.05:
+            #     reward += 1000
         if self.step_count >= self.step_limit:
+            reward -= 30
             done = True
         
 
         if done and self.render_ready:
             print(f"Locations: {self.locations}")
             print(f"Path: {self.path}")
+            print(f"Efficiency: {self.dist_sum / self.min_dist}; {self.dist_sum} vs. {self.min_dist}")
             fig, ax = plt.subplots(figsize=(12,8))
             for n in range(self.N):
                 pt = self.locations[n]
@@ -154,6 +156,7 @@ class TSPEnv(gym.Env):
         return dx*dx + dy*dy
 
     def _RESET(self):
+        np.random.seed()
         if self.step_count > 0:
             steps_log.append(self.step_count)
             if self.step_count < self.N*2:
