@@ -1,6 +1,6 @@
 # import or_gym
 # from or_gym.utils import create_env
-from TSPEnv import TSPEnv, save_logs
+from DTSPEnv import DTSPEnv, save_logs
 import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,8 +15,8 @@ import torch
 torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
 gym.envs.register(
-     id='TSPEnv-v0',
-     entry_point=TSPEnv,
+     id='DTSPEnv-v0',
+     entry_point=DTSPEnv,
      max_episode_steps=50,
      kwargs={},
 )
@@ -30,8 +30,8 @@ device = torch.device('cuda')
 
 # train_envs = ts.env.ShmemVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
 # test_envs = ts.env.ShmemVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
-train_envs = ts.env.SubprocVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
-test_envs = ts.env.SubprocVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
+train_envs = ts.env.SubprocVectorEnv([lambda: gym.make('DTSPEnv-v0') for _ in range(10)])
+test_envs = ts.env.SubprocVectorEnv([lambda: gym.make('DTSPEnv-v0') for _ in range(100)])
 # train_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
 # test_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
 
@@ -58,16 +58,16 @@ class Net(nn.Module):
         logits = self.model(obs.view(batch, -1))
         return logits, state
 
-env = TSPEnv()
+env = DTSPEnv()
 
 state_shape = env.observation_space.shape or env.observation_space.n
 print(f'State shape: {state_shape}')
 action_shape = env.action_space.shape or env.action_space.n
 net = Net(state_shape, action_shape)
 
-print(next(net.parameters()).is_cuda) # False
+# print(next(net.parameters()).is_cuda) # False
 net.to(device)
-print(next(net.parameters()).is_cuda) # True
+# print(next(net.parameters()).is_cuda) # True
 
 optim = torch.optim.Adam(net.parameters(), lr=1e-3)
 
@@ -83,8 +83,8 @@ policy = ts.policy.DQNPolicy(
 
 print(torch.cuda.get_device_name(0))
 print('Memory Usage:')
-print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**3,1), 'GB')
-print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')
+print('Allocated:', torch.cuda.memory_allocated(0)/1024**3, 'GB')
+print('Cached:   ', torch.cuda.memory_reserved(0)/1024**3, 'GB')
 
 train_collector = ts.data.Collector(policy, train_envs, ts.data.VectorReplayBuffer(20000, 10), exploration_noise=True)
 test_collector = ts.data.Collector(policy, test_envs, exploration_noise=True)
@@ -93,7 +93,7 @@ result = ts.trainer.OffpolicyTrainer(
     policy=policy,
     train_collector=train_collector,
     test_collector=test_collector,
-    max_epoch=20, 
+    max_epoch=30, 
     step_per_epoch=10000,
     step_per_collect=10,
     update_per_step=0.1, episode_per_test=100, batch_size=64,
@@ -106,7 +106,7 @@ print(f'Finished training! Took {result["duration"]}')
 save_logs()
 
 policy.eval()
-policy.set_eps(0.00)
+policy.set_eps(0.05)
 collector = ts.data.Collector(policy, env, exploration_noise=True)
 collector.collect(n_episode=5, render=1)
 

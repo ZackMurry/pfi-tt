@@ -11,93 +11,78 @@ steps_log = []
 dist_log = []
 solved_log = []
 
-class TSPEnv(gym.Env):
+class DTSPEnv(gym.Env):
     '''
-    Bi-directional connections and uniform cost
-
-    This version of the TSP uses a sparse graph with uniform cost.
-    The goal is to minimize the cost to traverse all of the nodes in the
-    network. All connections are bi-directional meaning if a connection
-    between nodes n and m exist, then the agent can move in either direction.
-    The network is randomly generated with N nodes when the environment is
-    initialized using or_gym.make(). 
-    
-    TSP-v0 allows repeat visits to nodes with no additional penalty beyond
-    the nominal movement cost.
-
-    Observation:
-        
-
-    Actions:
-        Type: Discrete
-        0: move to node 0
-        1: move to node 1
-        2: ...
-
-    Action Masking (optional):
-        Masks non-existent connections, otherwise a large penalty is imposed
-        on the agent.
-
-    Reward:
-        Cost of moving from node to node or large negative penalty for
-        attempting to move to a node via a non-existent connection.
-
-    Starting State:
-        Random node
-
-    Episode Termination:
-        All nodes have been visited or the maximimum number of steps (2N)
-        have been reached.
+    Dynamic Traveling Salesman Problem Environment
     '''
     def __init__(self, *args, **kwargs):
-        self.N = 5
+        self.N = 1
+        self.M = 5
+        self.t = -1
         self.dist_factor = 7
         self.use_dataset = False
         self.move_cost = -1
         self.invalid_action_cost = -100
         self.dist_matrix = []
+        self.time_limits = [0]
+        self.new_time_limit = 0
         self.mask = False
         self.spec = SimpleNamespace(reward_threshold=100)
         self.render_ready = False
 
         self.locations = []
+        self.new_node_loc = []
         self.min_dist = -1
         self.step_count = 0
-        self.nodes = np.arange(self.N)
-        self.step_limit = 2*self.N
-        self.obs_dim = 1+self.N**2
+        self.nodes = np.arange(self.M)
+        self.step_limit = 2*self.M
+        # self.obs_dim = 1+self.N**2
         # obs_space = spaces.Box(-1, self.N, shape=(self.obs_dim,), dtype=np.int32)
-        self.observation_space = spaces.MultiDiscrete([self.N+1] + [2]*self.N + [20]*(self.N*(self.N-1)//2))
+        # Format: current node, time, visited, distance matrix, time requirements, time requirement for new node, new distance matrix column if accepted
+        self.observation_space = spaces.MultiDiscrete([self.M] + [self.step_limit] + [2]*self.M + [20]*(self.M*(self.M-1)//2) + [self.step_limit]*self.M + [self.step_limit] + [20] * self.M)
         # Example: [ 0  1  0  0  0  0  0 54 77 94 79 54  0 23 40 41 77 23  0 17 28 94 40 17 0 27 79 41 28 27  0]
-        # print(self.observation_space)
 
-        self.action_space = spaces.Discrete(self.N)
+        # Format: node to move to (0->M), whether to accept the incoming request
+        self.action_space = spaces.MultiDiscrete([self.M, 2])
         self.path = []
         self.dist_sum = 0
         self.reset()
         
     def _STEP(self, action):
         # print(action)
+        target = action[0]
+        accept = action[1]
+        print(f"Target: {target}, accept: {accept}")
         done = False
-        self.path.append(action)
+        self.path.append(target)
         # reward based on comparison to minimum path instead of absolute distance (varies too much)
-        dist = self._node_dist_manhattan(self.current_node, action)
+        dist = self._node_dist_manhattan(self.current_node, target)
         # dist = self._node_dist_manhattan(self.current_node, action) / self.min_dist
         self.dist_sum += dist
         reward = -(dist/self.min_dist) * self.dist_factor
-        # if self.render_ready:
-            # print(f"dist penalty: {reward}")
-        if self.visit_log[action] >= 1:
-            # print('repeat')
+        if self.visit_log[target] >= 1:
             reward -= 10
         # print(f"subtracting {reward}")
-        self.current_node = action
-        # print(action)
-        # if self.visit_log[self.current_node] == 0:
-            # print('new node')
-            # reward += 1
+        self.current_node = target
         self.visit_log[self.current_node] += 1
-            
+        
+        if accept == 1:
+            if self.new_time_limit != 0:
+                self.locations.append(self.new_node_loc)
+                self.generate_1d_distance_matrix()
+                self.time_limits.append(self.new_time_limit)
+                reward += 3
+            else:
+                # No new node! Error by algorithm
+                reward -= 10
+        self.new_time_limit = 0
+        for i in range(self.N):
+            if self.visit_log[i] == 0 and self.time_limits[i] <= self.t:
+                reward -= 1
+
+        if self.visit_log[self.current_node] == 1 and self.time_limits[self.current_node] >= self.t:
+            reward += 3
+
         self.state = self._update_state()
         self.step_count += 1
         # See if all nodes have been visited
@@ -111,16 +96,15 @@ class TSPEnv(gym.Env):
             self.dist_sum += dist
             reward -= dist * self.dist_factor
             done = True
-            # reward += 20 - 5 * (self.dist_sum / self.min_dist)
+            reward += 20 - 5 * (self.dist_sum / self.min_dist)
             # if self.dist_sum <= self.min_dist * 1.05:
             #     reward += 1000
         if self.step_count >= self.step_limit:
             reward -= 30
             done = True
-        
+
         if done and self.use_dataset:
             print(f"Path: {self.path}")
-            print("Optimal: 0 2 1 4 3")
             print(f"Distance: {self.dist_sum}")
 
         if done and self.render_ready:
@@ -150,7 +134,6 @@ class TSPEnv(gym.Env):
         dy = apt[1] - bpt[1]
         return abs(dx) + abs(dy)
 
-
     def _node_sqdist(self, a, b):
         apt = self.locations[a]
         bpt = self.locations[b]
@@ -170,7 +153,12 @@ class TSPEnv(gym.Env):
                 solved_log.append(0)
         self.step_count = 0
         self.dist_sum = 0
-        self.current_node = 0#np.random.choice(self.nodes)
+        self.new_node_loc = []
+        self.time_limits = [0]
+        self.new_time_limit = 0
+        self.t = -1
+        self.N = 1
+        self.current_node = 0 #np.random.choice(self.nodes)
         self.visit_log = {n: 0 for n in self.nodes}
         self.visit_log[self.current_node] += 1
         if self.use_dataset:
@@ -193,19 +181,43 @@ class TSPEnv(gym.Env):
         
 
     def _update_state(self):
-        visit_list = [min(self.visit_log[i], 1) for i in range(self.N)]
-        state = np.array([self.current_node] + visit_list + self.dist_matrix)
+        self.t += 1
+        visit_list = [min(self.visit_log[i], 1) for i in range(self.M)]
+        self.generate_1d_distance_matrix()
+        self.new_time_limit = 0
+        if self.t > 0 and np.random.rand() > 0.5:
+            # Create new node requestYeah 
+            self.new_node_loc = [np.random.randint(0,10), np.random.randint(0,10)]
+            self.new_time_limit = np.random.randint(self.t+1, self.step_limit)
+        else:
+            self.new_node_loc = []
+        new_node_matrix = self._get_dists(self.new_node_loc)
+        state = np.array([self.current_node, self.t] + visit_list + self.dist_matrix + self.time_limits + [self.new_time_limit] + new_node_matrix)
         # print(f'state: {state}')
         return state
             
     def generate_1d_distance_matrix(self):
         matrix = []
         # max_dist = 100 * np.sqrt(2)
-        for i in range(self.N):
-            for j in range(i+1, self.N):
-                matrix.append(self._node_dist_manhattan(i, j))
+        for i in range(self.M):
+            for j in range(i+1, self.M):
+                if i >= self.N or j >= self.N:
+                    matrix.append(0)
+                else:
+                    matrix.append(self._node_dist_manhattan(i, j))
         # print(f"matrix: {matrix}")
         self.dist_matrix = matrix
+
+    def _get_dists(self, new_node):
+        if len(new_node) == 0:
+            return [0] * self.M
+        matrix = []
+        for i in range(self.M):
+            apt = self.locations[i]
+            dx = apt[0] - new_node[0]
+            dy = apt[1] - new_node[1]
+            matrix.append(abs(dx) + abs(dy))
+        return matirx
 
     def _generate_coordinates(self):
         n = np.linspace(0, 2*np.pi, self.N+1)
