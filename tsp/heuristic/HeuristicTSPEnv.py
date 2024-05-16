@@ -20,7 +20,6 @@ def factorial(n):
 
 def get_route_from_action(action):
     route = []
-    print(f"4! = {factorial(4)}")
     route.append(action // factorial(4))
     action %= factorial(4)
     route.append(action // factorial(3))
@@ -96,30 +95,30 @@ class HeuristicTSPEnv(gym.Env):
         # }
         # customers is sorted in order of ID
         self.customers = [
-            # {
-            #     "id": 0,
-            #     "x": 3,
-            #     "y": 5,
-            #     "deadline": 10
-            # },
-            # {
-            #     "id": 1,
-            #     "x": 2,
-            #     "y": 1,
-            #     "deadline": 15
-            # },
-            # {
-            #     "id": 2,
-            #     "x": 7,
-            #     "y": 10,
-            #     "deadline": 30
-            # },
-            # {
-            #     "id": 3,
-            #     "x": 5,
-            #     "y": 8,
-            #     "deadline": 30
-            # },
+            {
+                "id": 0,
+                "x": 3,
+                "y": 5,
+                "deadline": 10
+            },
+            {
+                "id": 1,
+                "x": 2,
+                "y": 1,
+                "deadline": 15
+            },
+            {
+                "id": 2,
+                "x": 7,
+                "y": 10,
+                "deadline": 30
+            },
+            {
+                "id": 3,
+                "x": 5,
+                "y": 8,
+                "deadline": 30
+            },
         ] # index=id, x, y, deadline
         self.planned_route = []
         self.depot = {
@@ -147,6 +146,7 @@ class HeuristicTSPEnv(gym.Env):
         })
 
         self.action_space = spaces.Discrete(2 * 5 * 4 * 3 * 2)
+        # self.action_space = spaces.Box(np.array([0,0]), np.array([2,3]), dtype=int)
 
         self._plan_route()
         self.reset()
@@ -155,15 +155,16 @@ class HeuristicTSPEnv(gym.Env):
 
     def _STEP(self, action):
         done = False
+        raw_action = action
         self.step_count += 1
         
-        print(f"Action: {action}")
+        # print(f"Action: {action}")
         # print(unflatten(self.action_space, action))
         # return {}, 0, False, False, {}
         accept = action & 1
         action //= 2
         route = get_route_from_action(action)
-        print(f"Accept: {accept}, route: {route}")
+        print(f"Accept: {accept}, route: {route}, raw: {raw_action}")
         # route = get_route_from_action(119)
         # print(f"route: {route}")
         
@@ -204,23 +205,26 @@ class HeuristicTSPEnv(gym.Env):
         for cust in self.customers:
             if not cust in route:
                 reward -= 3
+        
+        if reward >= 0:
+            print('good route!')
 
         # Validate feasibility
-        time = self.t
-        vx = self.x
-        vy = self.y
-        for dest in route:
-            for i in range(len(self.customers)):
-                cust = self.customers[i]
-                if cust['id'] == dest:
-                    dt = self._get_travel_time(self.x, self.y, cust)
-                    if time + dt > cust['deadline']:
-                        reward -= 2
-                        # Drop customer
-                        self.customers.pop(i)
-                        route.remove(i)
-                        i -= 1
-                    break
+        # time = self.t
+        # vx = self.x
+        # vy = self.y
+        # for dest in route:
+        #     for i in range(len(self.customers)):
+        #         cust = self.customers[i]
+        #         if cust['id'] == dest:
+        #             dt = self._get_travel_time(self.x, self.y, cust)
+        #             if time + dt > cust['deadline']:
+        #                 reward -= 2
+        #                 # Drop customer
+        #                 # self.customers.pop(i)
+        #                 # route.remove(i)
+        #                 # i -= 1
+        #             break
         
         # if done and self.use_dataset:
         #     print(f"Path: {self.path}")
@@ -267,7 +271,7 @@ class HeuristicTSPEnv(gym.Env):
         self.x = 0
         self.y = 0
         self.nodes_proposed = 0
-        self.customers = []
+        # self.customers = []
         self.request = self._generate_request()
         # self.generate_1d_distance_matrix()
         self._plan_route()
@@ -303,9 +307,9 @@ class HeuristicTSPEnv(gym.Env):
         i = 1
         for cust in self.customers:
             custs['id'].append(i)
-            custs['x'].append(cust.x)
-            custs['y'].append(cust.y)
-            custs['deadline'].append(cust.deadline)
+            custs['x'].append(cust['x'])
+            custs['y'].append(cust['y'])
+            custs['deadline'].append(cust['deadline'])
             i += 1
         
         while len(custs['id']) < self.MAX_QUEUE:
@@ -334,13 +338,13 @@ class HeuristicTSPEnv(gym.Env):
         to_visit = []
         for i in range(len(self.customers)):
             to_visit.append({
-                "id": i,
+                "id": self.customers[i].get('id'),
                 "x": self.customers[i].get('x'),
                 "y": self.customers[i].get('y'),
                 "deadline": self.customers[i].get('deadline')
             })
         
-        print(f"Customers: {to_visit}")
+        # print(f"Customers: {to_visit}")
 
         time = 0
         # Go to the next closest customer every time
@@ -363,7 +367,7 @@ class HeuristicTSPEnv(gym.Env):
             visited.append(min_t_id)
             to_visit.pop(min_t_i)
         
-        print(f"Total time: {time}")
+        # print(f"Total time: {time}")
         return visited
 
     def _get_travel_time(self, x, y, customer):
