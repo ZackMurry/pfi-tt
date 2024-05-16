@@ -5,15 +5,12 @@ import gymnasium as gym
 from gymnasium.wrappers import FlattenObservation
 import numpy as np
 import matplotlib.pyplot as plt
-# import gi
-# import ray
-# from ray.rllib.algorithms import ppo
 import tianshou as ts
 import torch
 
-# print([7+1]+[100]*7*2)
 
-HeuristicTSPEnv()
+num_train_envs = 1
+
 
 torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
@@ -33,7 +30,7 @@ device = torch.device('cuda')
 
 # train_envs = ts.env.ShmemVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
 # test_envs = ts.env.ShmemVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
-train_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(1)])
+train_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
 test_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(1)])
 # train_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
 # test_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
@@ -59,6 +56,7 @@ class Net(nn.Module):
             obs = torch.tensor(obs, dtype=torch.float, device=device)
         batch = obs.shape[0]
         logits = self.model(obs.view(batch, -1))
+        # print(f"logits: {logits}")
         return logits, state
 
 env = FlattenObservation(HeuristicTSPEnv())
@@ -77,6 +75,8 @@ print(next(net.parameters()).is_cuda) # True
 optim = torch.optim.Adam(net.parameters(), lr=1e-3)
 
 # policy  = ts.policy.PPOPolicy(
+print(f"action space: {env.action_space}")
+print(f"sample: {env.action_space.sample()}")
 policy = ts.policy.DQNPolicy(
     model=net,
     optim=optim,
@@ -88,10 +88,10 @@ policy = ts.policy.DQNPolicy(
 
 print(torch.cuda.get_device_name(0))
 print('Memory Usage:')
-print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**3,1), 'GB')
-print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**3,1), 'GB')
+print('Allocated:', round(torch.cuda.memory_allocated(0)/1024**2,1), 'MB')
+print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**2,1), 'MB')
 
-train_collector = ts.data.Collector(policy, train_envs, ts.data.VectorReplayBuffer(20000, 10), exploration_noise=True)
+train_collector = ts.data.Collector(policy, train_envs, ts.data.VectorReplayBuffer(20000, num_train_envs), exploration_noise=True)
 test_collector = ts.data.Collector(policy, test_envs, exploration_noise=True)
 
 result = ts.trainer.OffpolicyTrainer(

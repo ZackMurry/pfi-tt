@@ -2,6 +2,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from gymnasium.spaces.utils import flatten, flatten_space, unflatten
+# from transform import flatten as flatten_discrete
 from copy import copy, deepcopy
 import matplotlib.pyplot as plt
 from time import sleep
@@ -11,6 +12,28 @@ from types import SimpleNamespace
 steps_log = []
 dist_log = []
 solved_log = []
+
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n-1)
+
+def get_route_from_action(action):
+    route = []
+    print(f"4! = {factorial(4)}")
+    route.append(action // factorial(4))
+    action %= factorial(4)
+    route.append(action // factorial(3))
+    action %= factorial(3)
+    route.append(action // factorial(2))
+    action %= factorial(2)
+    route.append(action // factorial(1))
+    action %= factorial(1)
+    for i in range(5):
+        if not i in route:
+            route.append(i)
+            break
+    return route
 
 class HeuristicTSPEnv(gym.Env):
     '''
@@ -55,10 +78,11 @@ class HeuristicTSPEnv(gym.Env):
         self.x = 0
         self.y = 0
         self.MAX_T = 100
-        self.MAX_NODES = 25
-        self.MAX_QUEUE = 7
+        self.MAX_NODES = 20
+        self.MAX_QUEUE = 5
         self.nodes_proposed = 0
         self.use_dataset = False
+        self.step_count = 0
         self.spec = SimpleNamespace(reward_threshold=100)
         self.render_ready = False
         self.MAX_X = 20
@@ -70,6 +94,7 @@ class HeuristicTSPEnv(gym.Env):
         #     "y": 0,
         #     "deadline": 0
         # }
+        # customers is sorted in order of ID
         self.customers = [
             # {
             #     "id": 0,
@@ -107,13 +132,13 @@ class HeuristicTSPEnv(gym.Env):
         self.observation_space = spaces.Dict({
             "t": spaces.Discrete(self.MAX_T),
             "request": spaces.Dict({
-                "id": spaces.Discrete(self.MAX_NODES),
+                "id": spaces.Discrete(self.MAX_QUEUE),
                 "x": spaces.Discrete(self.MAX_X),
                 "y": spaces.Discrete(self.MAX_Y),
                 "deadline": spaces.Discrete(self.MAX_T)
             }),
             "customers": spaces.Dict({
-                "id": spaces.MultiDiscrete([self.MAX_NODES]*self.MAX_QUEUE),
+                "id": spaces.MultiDiscrete([self.MAX_QUEUE]*self.MAX_QUEUE),
                 "x": spaces.MultiDiscrete([self.MAX_X]*self.MAX_QUEUE),
                 "y": spaces.MultiDiscrete([self.MAX_Y]*self.MAX_QUEUE),
                 "deadline": spaces.MultiDiscrete([self.MAX_T]*self.MAX_QUEUE)
@@ -121,26 +146,26 @@ class HeuristicTSPEnv(gym.Env):
             "planned_route": spaces.MultiDiscrete([self.MAX_NODES]*self.MAX_QUEUE)
         })
 
-        # Unflattened observation space:
-        self.raw_action_space = spaces.Dict({
-            "accept": spaces.Discrete(2),
-            "route": spaces.MultiDiscrete([self.MAX_NODES]*self.MAX_QUEUE)
-        })
-        # Flattened observation space (not implementing a wrapper lol)
-        self.action_space = spaces.MultiDiscrete([2] + [self.MAX_NODES]*self.MAX_QUEUE)
-        # self.action_space = flatten_space(self.raw_action_space)
+        self.action_space = spaces.Discrete(2 * 5 * 4 * 3 * 2)
+
         self._plan_route()
         self.reset()
-        
+    
+
+
     def _STEP(self, action):
         done = False
+        self.step_count += 1
         
         print(f"Action: {action}")
         # print(unflatten(self.action_space, action))
         # return {}, 0, False, False, {}
-        accept = action[0]
-        route = action[1:]
+        accept = action & 1
+        action //= 2
+        route = get_route_from_action(action)
         print(f"Accept: {accept}, route: {route}")
+        # route = get_route_from_action(119)
+        # print(f"route: {route}")
         
         reward = 0
         if accept == 1:
@@ -159,7 +184,7 @@ class HeuristicTSPEnv(gym.Env):
             if route[-i-1] != 0:
                 reward -= 1
 
-        route = route[0:len(customers+accept)]
+        route = route[0:len(self.customers)+accept]
 
         # Check for duplicates
         for i in range(len(route)):
@@ -168,7 +193,7 @@ class HeuristicTSPEnv(gym.Env):
                     route[j] = -1
         
         for i in range(len(route)):
-            if route[-i-1] == -1:
+            if route[len(route)-i-1] == -1:
                 # print('Duplicate destination')
                 reward -= 1
                 route.pop(len(route) - i - 1)
@@ -185,21 +210,17 @@ class HeuristicTSPEnv(gym.Env):
         vx = self.x
         vy = self.y
         for dest in route:
-            for i in range(self.customers):
+            for i in range(len(self.customers)):
                 cust = self.customers[i]
-                if cust.id == dest:
+                if cust['id'] == dest:
                     dt = self._get_travel_time(self.x, self.y, cust)
-                    if time + dt > cust.deadline:
+                    if time + dt > cust['deadline']:
                         reward -= 2
                         # Drop customer
                         self.customers.pop(i)
                         route.remove(i)
                         i -= 1
                     break
-
-
-
-
         
         # if done and self.use_dataset:
         #     print(f"Path: {self.path}")
@@ -268,7 +289,7 @@ class HeuristicTSPEnv(gym.Env):
         req = self.request
         if req == None:
             req = {
-                "id": 0,
+                "id": 0, # id of 0 => null
                 "x": 0,
                 "y": 0,
                 "deadline": 0
@@ -279,14 +300,16 @@ class HeuristicTSPEnv(gym.Env):
             "y": [],
             "deadline": []
         }
+        i = 1
         for cust in self.customers:
-            custs['id'].append(cust.id)
+            custs['id'].append(i)
             custs['x'].append(cust.x)
             custs['y'].append(cust.y)
             custs['deadline'].append(cust.deadline)
+            i += 1
         
         while len(custs['id']) < self.MAX_QUEUE:
-            custs['id'].append(0)
+            custs['id'].append(0) # id of 0 => null
             custs['x'].append(0)
             custs['y'].append(0)
             custs['deadline'].append(0)
