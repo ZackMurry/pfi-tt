@@ -9,7 +9,7 @@ import tianshou as ts
 import torch
 
 
-num_train_envs = 1
+num_train_envs = 10
 
 
 torch.set_default_tensor_type(torch.cuda.FloatTensor)
@@ -30,9 +30,10 @@ device = torch.device('cuda')
 
 # train_envs = ts.env.ShmemVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
 # test_envs = ts.env.ShmemVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
-train_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
+# train_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
+train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
 test_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(1)])
-# train_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(10)])
+# train_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(num_train_envs)])
 # test_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
 
 import torch, numpy as np
@@ -45,7 +46,7 @@ class Net(nn.Module):
             nn.Linear(np.prod(state_shape), 128), nn.ReLU(inplace=True),
             nn.Linear(128, 128), nn.ReLU(inplace=True),
             nn.Linear(128, 128), nn.ReLU(inplace=True),
-            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
+            nn.Linear(128, 128), nn.ReLU(inplace=True), # new
             # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
             # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
             nn.Linear(128, np.prod(action_shape), device=device),
@@ -98,7 +99,7 @@ result = ts.trainer.OffpolicyTrainer(
     policy=policy,
     train_collector=train_collector,
     test_collector=test_collector,
-    max_epoch=40, 
+    max_epoch=50, 
     step_per_epoch=10000,
     step_per_collect=10,
     update_per_step=0.1, episode_per_test=100, batch_size=64,

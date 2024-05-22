@@ -9,30 +9,7 @@ from time import sleep
 from datetime import datetime
 from types import SimpleNamespace
 
-steps_log = []
-dist_log = []
-solved_log = []
-
-def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n-1)
-
-def get_route_from_action(action):
-    route = []
-    route.append(action // factorial(4))
-    action %= factorial(4)
-    route.append(action // factorial(3))
-    action %= factorial(3)
-    route.append(action // factorial(2))
-    action %= factorial(2)
-    route.append(action // factorial(1))
-    action %= factorial(1)
-    for i in range(5):
-        if not i in route:
-            route.append(i)
-            break
-    return route
+perfect_log = []
 
 class HeuristicTSPEnv(gym.Env):
     '''
@@ -76,7 +53,7 @@ class HeuristicTSPEnv(gym.Env):
         self.t = 0
         self.x = 0
         self.y = 0
-        self.MAX_T = 100
+        self.MAX_T = 101
         self.MAX_NODES = 20
         self.MAX_QUEUE = 5
         self.nodes_proposed = 0
@@ -87,6 +64,7 @@ class HeuristicTSPEnv(gym.Env):
         self.MAX_X = 20
         self.MAX_Y = 20
         self.request = None
+        self.episodes = 0
         # self.request = {
         #     "id": 0,
         #     "x": 0,
@@ -95,157 +73,173 @@ class HeuristicTSPEnv(gym.Env):
         # }
         # customers is sorted in order of ID
         self.customers = [
-            {
-                "id": 0,
-                "x": 3,
-                "y": 5,
-                "deadline": 10
-            },
-            {
-                "id": 1,
-                "x": 2,
-                "y": 1,
-                "deadline": 15
-            },
-            {
-                "id": 2,
-                "x": 7,
-                "y": 10,
-                "deadline": 30
-            },
-            {
-                "id": 3,
-                "x": 5,
-                "y": 8,
-                "deadline": 30
-            },
-        ] # index=id, x, y, deadline
+            # {
+            #     "id": 0,
+            #     "x": 3,
+            #     "y": 5,
+            #     "deadline": 10
+            # },
+            # {
+            #     "id": 1,
+            #     "x": 2,
+            #     "y": 1,
+            #     "deadline": 15
+            # },
+            # {
+            #     "id": 2,
+            #     "x": 7,
+            #     "y": 10,
+            #     "deadline": 30
+            # },
+            # {
+            #     "id": 3,
+            #     "x": 5,
+            #     "y": 8,
+            #     "deadline": 30
+            # },
+        ] # id, x, y, deadline
+        self.proposed_route = []
         self.planned_route = []
         self.depot = {
             "x": 0,
             "y": 0
         }
 
-        self.step_limit = 30
+        self.step_limit = 7
+        self.proposed_time = 0
 
+        max_queue_range = self.MAX_QUEUE + 1
         self.observation_space = spaces.Dict({
+            "planned_route": spaces.MultiDiscrete([max_queue_range]*self.MAX_QUEUE),
+            "proposed_route": spaces.MultiDiscrete([max_queue_range]*self.MAX_QUEUE),
             "t": spaces.Discrete(self.MAX_T),
             "request": spaces.Dict({
-                "id": spaces.Discrete(self.MAX_QUEUE),
+                # "id": spaces.Discrete(max_queue_range),
                 "x": spaces.Discrete(self.MAX_X),
                 "y": spaces.Discrete(self.MAX_Y),
                 "deadline": spaces.Discrete(self.MAX_T)
             }),
             "customers": spaces.Dict({
-                "id": spaces.MultiDiscrete([self.MAX_QUEUE]*self.MAX_QUEUE),
+                # "id": spaces.MultiDiscrete([max_queue_range]*self.MAX_QUEUE),
                 "x": spaces.MultiDiscrete([self.MAX_X]*self.MAX_QUEUE),
                 "y": spaces.MultiDiscrete([self.MAX_Y]*self.MAX_QUEUE),
                 "deadline": spaces.MultiDiscrete([self.MAX_T]*self.MAX_QUEUE)
-            }),
-            "planned_route": spaces.MultiDiscrete([self.MAX_NODES]*self.MAX_QUEUE)
+            })
         })
-
-        self.action_space = spaces.Discrete(2 * 5 * 4 * 3 * 2)
+        
+        self.action_space = spaces.Discrete(self.MAX_QUEUE*2+1, start=0)
         # self.action_space = spaces.Box(np.array([0,0]), np.array([2,3]), dtype=int)
-
-        self._plan_route()
+        self.is_perfect = True
         self.reset()
     
 
 
     def _STEP(self, action):
         done = False
-        raw_action = action
+        action -= self.MAX_QUEUE
         self.step_count += 1
         
-        # print(f"Action: {action}")
-        # print(unflatten(self.action_space, action))
-        # return {}, 0, False, False, {}
-        accept = action & 1
-        action //= 2
-        route = get_route_from_action(action)
-        print(f"Accept: {accept}, route: {route}, raw: {raw_action}")
         # route = get_route_from_action(119)
         # print(f"route: {route}")
-        
+
+
+        # todo: reject request
         reward = 0
-        if accept == 1:
-            if self.request == None:
-                reward -= 3
+        # print(f"Action: {action}")
+        if action > 0: # Append customer with index of action to route
+            if self.planned_route.count(action) == 0 and action <= len(self.customers):
+                self.planned_route.append(action)
             else:
-                reward += 1
+                reward -= 2 # Duplicate customer
+                # if self.planned_route.count(action) > 0:
+                    # print(f'Error: duplicate customer')
+                # else:
+                    # print('Error: customer index too high!')
+                self.is_perfect = False
+        elif self.request != None:
+            if -action <= len(self.planned_route):
                 self.customers.append(self.request)
+                self.planned_route.insert(-action, len(self.customers))
                 self.request = None
-
-
+                reward += 1
+            else:
+                reward -= 0.25 # Index too high
+                # print(f'Error: insert index too high')
+                self.is_perfect = False
+        else:
+            reward -= 2 # No request made
+            self.is_perfect = False
+            # print(f'Error: no request made')
         
-        # Check for route longer than available customers
-        # i.e., non-served routes need id=0=null
-        for i in range(len(route) - len(self.customers)):
-            if route[-i-1] != 0:
+
+        if self.request == None and len(self.customers) < self.MAX_QUEUE:
+            self.request = self._generate_request()
+
+        # print(f"Action: {action}; route: {self.planned_route}")
+        # Validate path
+        time = self.t
+        vx = self.x
+        vy = self.y
+        for dest in self.planned_route:
+            cust = self.customers[dest-1]
+            dt = self._get_travel_time(vx, vy, cust)
+            if time + dt > cust['deadline']:
+                print(f'Missed deadline! {time + dt} vs. {cust["deadline"]}')
+                # print(f'Error: missed deadline of {cust["deadline"]}')
+                self.is_perfect = False
                 reward -= 1
+                perfect_log.append(0)
+                done = True
+                # to_remove.append(i)
+                break
+            else:
+                time += dt
+                vx = cust.get('x')
+                vy = cust.get('y')
 
-        route = route[0:len(self.customers)+accept]
-
-        # Check for duplicates
-        for i in range(len(route)):
-            for j in range(i+1, len(route)):
-                if route[i] == route[j]:
-                    route[j] = -1
-        
-        for i in range(len(route)):
-            if route[len(route)-i-1] == -1:
-                # print('Duplicate destination')
-                reward -= 1
-                route.pop(len(route) - i - 1)
-                i -= 1
-                    
-        print(f"sanitized route: {route}")
-
-        for cust in self.customers:
-            if not cust in route:
+        if len(self.planned_route) == self.MAX_QUEUE and not done:
+            done = True
+            perfect_log.append(1 if self.is_perfect else 0)
+            # print(f"route: {self.planned_route}, customers: {self.customers}")
+            self.proposed_route = self._propose_route()
+            if time > self.proposed_time:
                 reward -= 3
+            elif time != 0:
+                print('better than proposed!')
+                reward += 1.5 * (self.proposed_time / time) - 1
+            if self.is_perfect:
+                print('perfect!')
+                # reward += 3
+            # todo: show real arrival time
+            if self.episodes % 100 == 0:
+                print(f"Proposed route: {self.proposed_route}")
+                print(f"Generated route: {self.planned_route}")
+                print(f"Time {time} vs. Proposed Time {self.proposed_time}")
+                fig, ax = plt.subplots(figsize=(12,8))
+                for i in range(len(self.customers)):
+                    cust = self.customers[i]
+                    col = 'g' if i == self.planned_route[-1]-1 else 'b'
+                    ax.scatter(cust['x'], cust['y'], color=col, s=300)
+                    ax.annotate(f"$N_{i} d={cust['deadline']}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
+                col = 'go' if time <= self.proposed_time else 'bo'
+                ax.plot([0, self.customers[self.planned_route[0]-1]['x']],
+                    [0, self.customers[self.planned_route[0]-1]['y']], col, linestyle='solid')
+                for i in range(len(self.planned_route) - 1):
+                    # print(f"i: {i}, custs: {len(self.customers)}, planned_route: {self.planned_route}, planned_route[i]: {self.planned_route[i]}")
+                    ax.plot([self.customers[self.planned_route[i]-1]['x'], self.customers[self.planned_route[i+1]-1]['x']],
+                        [self.customers[self.planned_route[i]-1]['y'], self.customers[self.planned_route[i+1]-1]['y']], col, linestyle='solid')
+                ax.plot([0, self.customers[self.proposed_route[0]-1]['x']],
+                    [0, self.customers[self.proposed_route[0]-1]['y']], 'ro', linestyle='--')
+                for i in range(len(self.proposed_route) - 1):
+                    ax.plot([self.customers[self.proposed_route[i]-1]['x'], self.customers[self.proposed_route[i+1]-1]['x']],
+                        [self.customers[self.proposed_route[i]-1]['y'], self.customers[self.proposed_route[i+1]-1]['y']], 'ro', linestyle='--')
+                current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                fig.savefig(f"results/{self.MAX_QUEUE}-solution-{current_datetime}.png")
         
-        if reward >= 0:
-            print('good route!')
-
-        # Validate feasibility
-        # time = self.t
-        # vx = self.x
-        # vy = self.y
-        # for dest in route:
-        #     for i in range(len(self.customers)):
-        #         cust = self.customers[i]
-        #         if cust['id'] == dest:
-        #             dt = self._get_travel_time(self.x, self.y, cust)
-        #             if time + dt > cust['deadline']:
-        #                 reward -= 2
-        #                 # Drop customer
-        #                 # self.customers.pop(i)
-        #                 # route.remove(i)
-        #                 # i -= 1
-        #             break
+        self._update_state()
         
-        # if done and self.use_dataset:
-        #     print(f"Path: {self.path}")
-        #     print("Optimal: 0 2 1 4 3")
-        #     print(f"Distance: {self.dist_sum}")
-
-        if done and self.render_ready:
-            print(f"Locations: {self.locations}")
-            print(f"Path: {self.path}")
-            print(f"Efficiency: {self.dist_sum / self.min_dist}; {self.dist_sum} vs. {self.min_dist}")
-            fig, ax = plt.subplots(figsize=(12,8))
-            for n in range(self.N):
-                pt = self.locations[n]
-                clr = 'green' if n == 0 else 'black'
-                ax.scatter(pt[0], pt[1], color=clr, s=300)
-                ax.annotate(r"$N_{:d}$".format(n), xy=(pt[0]+0.4, pt[1]+0.05), zorder=2)
-            for i in range(len(self.path) - 1):
-                ax.plot([self.locations[self.path[i]][0], self.locations[self.path[i+1]][0]],
-                    [self.locations[self.path[i]][1], self.locations[self.path[i+1]][1]], 'bo', linestyle='solid')
-            current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            fig.savefig(f"{self.N}-solution-{current_datetime}.png")
+        if self.step_count >= self.step_limit and not done:
+            perfect_log.append(0)
         return self.state, reward, done, (self.step_count >= self.step_limit), {}
     
     def _node_dist(self, a, b):
@@ -267,78 +261,97 @@ class HeuristicTSPEnv(gym.Env):
 
     def _RESET(self):
         np.random.seed()
+        self.episodes += 1
+        if len(perfect_log) > 100 and len(perfect_log) % 100 == 0:
+            perf = 0
+            for i in range(len(perfect_log)-100, len(perfect_log)):
+                if perfect_log[i] == 1:
+                    perf += 1
+            # print(f'{perf}% perfect')
+        # print("RESET------------------------------------------")
+        self.is_perfect = True
         self.t = 0
         self.x = 0
         self.y = 0
         self.nodes_proposed = 0
-        # self.customers = []
+        self.proposed_time = 0
+        self.step_count = 0
+        self.customers = []
+        # self.request = None
         self.request = self._generate_request()
         # self.generate_1d_distance_matrix()
-        self._plan_route()
-        self.state = self._update_state()
+        self.proposed_route = self._propose_route()
+        self.planned_route = []
+        self._update_state()
         return self.state
         
     def _generate_request(self):
         self.nodes_proposed += 1
         return {
-            "id": self.nodes_proposed,
+            # "id": self.nodes_proposed,
             "x": np.random.randint(0, self.MAX_X),
             "y": np.random.randint(0, self.MAX_Y),
-            "deadline": np.random.randint(self.t, self.MAX_T)
+            "deadline": np.random.randint(30 + (self.nodes_proposed-1)*10, 35 + self.nodes_proposed*10)
         }
         
 
     def _update_state(self):
-        self._plan_route()
+        self.proposed_route = self._propose_route()
         req = self.request
         if req == None:
             req = {
-                "id": 0, # id of 0 => null
+                # "id": 0, # id of 0 => null
                 "x": 0,
                 "y": 0,
                 "deadline": 0
             }
         custs = {
-            "id": [],
+            # "id": [],
             "x": [],
             "y": [],
             "deadline": []
         }
         i = 1
         for cust in self.customers:
-            custs['id'].append(i)
+            # custs['id'].append(i)
             custs['x'].append(cust['x'])
             custs['y'].append(cust['y'])
             custs['deadline'].append(cust['deadline'])
             i += 1
         
-        while len(custs['id']) < self.MAX_QUEUE:
-            custs['id'].append(0) # id of 0 => null
+        while len(custs['x']) < self.MAX_QUEUE:
+            # custs['id'].append(0) # id of 0 => null
             custs['x'].append(0)
             custs['y'].append(0)
             custs['deadline'].append(0)
 
-        route = self.planned_route
-        while len(route) < self.MAX_QUEUE:
-            route.append(0)
+        proposed = self.proposed_route.copy()
+        while len(proposed) < self.MAX_QUEUE:
+            proposed.append(0)
+
+        planned = self.planned_route.copy()
+        while len(planned) < self.MAX_QUEUE:
+            planned.append(0)
 
         state = {
             "t": self.t,
-            "request": self.request,
+            "request": req,
             "customers": custs,
-            "planned_route": self.planned_route
+            "proposed_route": proposed,
+            "planned_route": planned
         }
-        print(f'state: {state}')
+        # print(f'state: {state}')
+        self.state = state
         return state
     
-    def _plan_route(self):
+    def _propose_route(self):
         x = self.depot.get('x')
         y = self.depot.get('y')
         visited = []
         to_visit = []
         for i in range(len(self.customers)):
             to_visit.append({
-                "id": self.customers[i].get('id'),
+                "id": i,
                 "x": self.customers[i].get('x'),
                 "y": self.customers[i].get('y'),
                 "deadline": self.customers[i].get('deadline')
@@ -360,14 +373,15 @@ class HeuristicTSPEnv(gym.Env):
                     min_t_i = i
             cx = self.customers[min_t_id].get('x')
             cy = self.customers[min_t_id].get('y')
-            print(f"Min t: {min_t}s from ({x}, {y}) to Customer {min_t_id} at ({cx}, {cy})")
+            # print(f"Min t: {min_t}s from ({x}, {y}) to Customer {min_t_id} at ({cx}, {cy})")
             x = cx
             y = cy
             time += min_t
-            visited.append(min_t_id)
+            visited.append(min_t_id+1)
             to_visit.pop(min_t_i)
-        
+
         # print(f"Total time: {time}")
+        self.proposed_time = time
         return visited
 
     def _get_travel_time(self, x, y, customer):
@@ -463,9 +477,10 @@ def save_log(data, name):
         avgs.append(sum / (len(data) // num_pts))
     fig, ax = plt.subplots()
     ax.scatter(range(num_pts), avgs)
-    fig.savefig(f'{data}_log.png')
+    fig.savefig(f'{name}_log.png')
 
 def save_logs():
-    save_log(steps_log, 'steps')
-    save_log(dist_log, 'dist')
-    save_log(solved_log, 'solved')
+    # save_log(steps_log, 'steps')
+    # save_log(dist_log, 'dist')
+    # save_log(solved_log, 'solved')
+    save_log(perfect_log, 'perfect')
