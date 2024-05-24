@@ -108,10 +108,14 @@ class HeuristicTSPEnv(gym.Env):
 
         self.step_limit = 7
         self.proposed_time = 0
+        self.rejections = 0
+        self.max_rejections = 3
 
         max_queue_range = self.MAX_QUEUE + 1
         self.observation_space = spaces.Dict({
             "planned_route": spaces.MultiDiscrete([max_queue_range]*self.MAX_QUEUE),
+            "route_length": spaces.Discrete(self.MAX_QUEUE+1),
+            "rejections": spaces.Discrete(self.max_rejections + 1),
             "proposed_route": spaces.MultiDiscrete([max_queue_range]*self.MAX_QUEUE),
             "t": spaces.Discrete(self.MAX_T),
             "request": spaces.Dict({
@@ -128,7 +132,7 @@ class HeuristicTSPEnv(gym.Env):
             })
         })
 
-        self.action_space = spaces.Discrete(self.MAX_QUEUE*2+1, start=0)
+        self.action_space = spaces.Discrete(self.MAX_QUEUE+1, start=0)
         # self.action_space = spaces.Box(np.array([0,0]), np.array([2,3]), dtype=int)
         self.is_perfect = True
         self.reset()
@@ -137,7 +141,6 @@ class HeuristicTSPEnv(gym.Env):
 
     def _STEP(self, action):
         done = False
-        action -= self.MAX_QUEUE
         self.action_list.append(action)
         self.step_count += 1
         
@@ -148,31 +151,20 @@ class HeuristicTSPEnv(gym.Env):
         # todo: reject request
         reward = 0
         print(f"Action: {action}")
-        if action > 0: # Append customer with index of action to route
-            if self.planned_route.count(action) == 0 and action <= len(self.customers):
-                self.planned_route.append(action)
-            else:
-                reward -= 1 # Duplicate customer
-                if self.planned_route.count(action) > 0:
-                    print(f'Error: duplicate customer')
-                else:
-                    print('Error: customer index too high!')
-                self.is_perfect = False
-        elif action == 0:
-            if self.step_count - len(self.customers) > 2:
-                reward -= 1
+        if action == 0:
+            self.rejections += 1
+            if self.rejections > self.max_rejections:
+                print('Too many rejections!')
+                reward -= 4
             self.request = None
             self.nodes_proposed -= 1
         elif self.request != None:
-            if -action-1 <= len(self.planned_route):
-                self.customers.append(self.request)
-                self.planned_route.insert(len(self.planned_route)+action+1, len(self.customers))
-                self.request = None
-                reward += 1
-            else:
-                reward -= 1 # Index too high
-                print(f'Error: insert index too high')
-                self.is_perfect = False
+            if action-1 > len(self.planned_route):
+                action = len(self.planned_route) + 1
+            self.customers.append(self.request)
+            self.planned_route.insert(action-1, len(self.customers))
+            self.request = None
+            reward += 1
         else:
             reward -= 2 # No request made
             self.is_perfect = False
@@ -195,11 +187,12 @@ class HeuristicTSPEnv(gym.Env):
                 print(f'Missed deadline! {time + dt} vs. {cust["deadline"]}')
                 # print(f'Error: missed deadline of {cust["deadline"]}')
                 self.is_perfect = False
-                reward -= 1
+                reward -= 3
                 time += dt
                 remaining[dest-1] = cust['deadline'] - time
                 perfect_log.append(0)
                 done = True
+                time = -1
                 # to_remove.append(i)
                 break
             else:
@@ -209,7 +202,6 @@ class HeuristicTSPEnv(gym.Env):
                 vx = cust.get('x')
                 vy = cust.get('y')
 
-        time = -1
 
         if len(self.planned_route) == self.MAX_QUEUE or done:
             if len(self.planned_route) == self.MAX_QUEUE:
@@ -220,7 +212,7 @@ class HeuristicTSPEnv(gym.Env):
             self.proposed_route = self._propose_route()
             if time > self.proposed_time:
                 reward -= 1
-            elif time != 0:
+            elif time > 0:
                 print('better than proposed!')
                 reward += 1.5 * (self.proposed_time / time)
             if self.is_perfect:
@@ -295,6 +287,7 @@ class HeuristicTSPEnv(gym.Env):
         self.nodes_proposed = 0
         self.proposed_time = 0
         self.step_count = 0
+        self.rejections = 0
         self.customers = []
         # self.request = None
         self.request = self._generate_request()
@@ -359,7 +352,9 @@ class HeuristicTSPEnv(gym.Env):
             "request": req,
             "customers": custs,
             "proposed_route": proposed,
-            "planned_route": planned
+            "planned_route": planned,
+            "route_length": len(self.planned_route),
+            "rejections": min(self.rejections, 2)
         }
         # print(f'state: {state}')
         self.state = state
