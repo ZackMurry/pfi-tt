@@ -100,6 +100,7 @@ class HeuristicTSPEnv(gym.Env):
         ] # id, x, y, deadline
         self.proposed_route = []
         self.planned_route = []
+        self.action_list = []
         self.depot = {
             "x": 0,
             "y": 0
@@ -126,7 +127,7 @@ class HeuristicTSPEnv(gym.Env):
                 "deadline": spaces.MultiDiscrete([self.MAX_T]*self.MAX_QUEUE)
             })
         })
-        
+
         self.action_space = spaces.Discrete(self.MAX_QUEUE*2+1, start=0)
         # self.action_space = spaces.Box(np.array([0,0]), np.array([2,3]), dtype=int)
         self.is_perfect = True
@@ -137,6 +138,7 @@ class HeuristicTSPEnv(gym.Env):
     def _STEP(self, action):
         done = False
         action -= self.MAX_QUEUE
+        self.action_list.append(action)
         self.step_count += 1
         
         # route = get_route_from_action(119)
@@ -145,31 +147,36 @@ class HeuristicTSPEnv(gym.Env):
 
         # todo: reject request
         reward = 0
-        # print(f"Action: {action}")
+        print(f"Action: {action}")
         if action > 0: # Append customer with index of action to route
             if self.planned_route.count(action) == 0 and action <= len(self.customers):
                 self.planned_route.append(action)
             else:
-                reward -= 2 # Duplicate customer
-                # if self.planned_route.count(action) > 0:
-                    # print(f'Error: duplicate customer')
-                # else:
-                    # print('Error: customer index too high!')
+                reward -= 1 # Duplicate customer
+                if self.planned_route.count(action) > 0:
+                    print(f'Error: duplicate customer')
+                else:
+                    print('Error: customer index too high!')
                 self.is_perfect = False
+        elif action == 0:
+            if self.step_count - len(self.customers) > 2:
+                reward -= 1
+            self.request = None
+            self.nodes_proposed -= 1
         elif self.request != None:
-            if -action <= len(self.planned_route):
+            if -action-1 <= len(self.planned_route):
                 self.customers.append(self.request)
-                self.planned_route.insert(-action, len(self.customers))
+                self.planned_route.insert(len(self.planned_route)+action+1, len(self.customers))
                 self.request = None
                 reward += 1
             else:
-                reward -= 0.25 # Index too high
-                # print(f'Error: insert index too high')
+                reward -= 1 # Index too high
+                print(f'Error: insert index too high')
                 self.is_perfect = False
         else:
             reward -= 2 # No request made
             self.is_perfect = False
-            # print(f'Error: no request made')
+            print(f'Error: no request made')
         
 
         if self.request == None and len(self.customers) < self.MAX_QUEUE:
@@ -180,6 +187,7 @@ class HeuristicTSPEnv(gym.Env):
         time = self.t
         vx = self.x
         vy = self.y
+        remaining = [-1] * len(self.customers)
         for dest in self.planned_route:
             cust = self.customers[dest-1]
             dt = self._get_travel_time(vx, vy, cust)
@@ -188,25 +196,33 @@ class HeuristicTSPEnv(gym.Env):
                 # print(f'Error: missed deadline of {cust["deadline"]}')
                 self.is_perfect = False
                 reward -= 1
+                time += dt
+                remaining[dest-1] = cust['deadline'] - time
                 perfect_log.append(0)
                 done = True
                 # to_remove.append(i)
                 break
             else:
                 time += dt
+                # remaining.append(cust['deadline']-time)
+                remaining[dest-1] = cust['deadline'] - time
                 vx = cust.get('x')
                 vy = cust.get('y')
 
-        if len(self.planned_route) == self.MAX_QUEUE and not done:
+        time = -1
+
+        if len(self.planned_route) == self.MAX_QUEUE or done:
+            if len(self.planned_route) == self.MAX_QUEUE:
+                reward += 1
             done = True
             perfect_log.append(1 if self.is_perfect else 0)
             # print(f"route: {self.planned_route}, customers: {self.customers}")
             self.proposed_route = self._propose_route()
             if time > self.proposed_time:
-                reward -= 3
+                reward -= 1
             elif time != 0:
                 print('better than proposed!')
-                reward += 1.5 * (self.proposed_time / time) - 1
+                reward += 1.5 * (self.proposed_time / time)
             if self.is_perfect:
                 print('perfect!')
                 # reward += 3
@@ -216,12 +232,15 @@ class HeuristicTSPEnv(gym.Env):
                 print(f"Generated route: {self.planned_route}")
                 print(f"Time {time} vs. Proposed Time {self.proposed_time}")
                 fig, ax = plt.subplots(figsize=(12,8))
+                ax.set_title(f'{self.action_list}')
                 for i in range(len(self.customers)):
                     cust = self.customers[i]
                     col = 'g' if i == self.planned_route[-1]-1 else 'b'
                     ax.scatter(cust['x'], cust['y'], color=col, s=300)
-                    ax.annotate(f"$N_{i} d={cust['deadline']}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
+                    ax.annotate(f"$N_{i},d={cust['deadline']},dt={remaining[i]}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
                 col = 'go' if time <= self.proposed_time else 'bo'
+                if time < 0:
+                    col = 'yo'
                 ax.plot([0, self.customers[self.planned_route[0]-1]['x']],
                     [0, self.customers[self.planned_route[0]-1]['y']], col, linestyle='solid')
                 for i in range(len(self.planned_route) - 1):
@@ -282,16 +301,18 @@ class HeuristicTSPEnv(gym.Env):
         # self.generate_1d_distance_matrix()
         self.proposed_route = self._propose_route()
         self.planned_route = []
+        self.action_list = []
         self._update_state()
         return self.state
         
     def _generate_request(self):
         self.nodes_proposed += 1
+        min_bound = 30 + (self.nodes_proposed-1)*10
+        min_bound = max(min_bound, 40)
         return {
-            # "id": self.nodes_proposed,
             "x": np.random.randint(0, self.MAX_X),
             "y": np.random.randint(0, self.MAX_Y),
-            "deadline": np.random.randint(30 + (self.nodes_proposed-1)*10, 35 + self.nodes_proposed*10)
+            "deadline": np.random.randint(min_bound, max(min_bound, 35 + self.nodes_proposed*10))
         }
         
 
