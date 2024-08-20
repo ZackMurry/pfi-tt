@@ -59,6 +59,7 @@ class HeuristicTSPEnv(gym.Env):
         self.nodes_proposed = 0
         self.use_dataset = False
         self.step_count = 0
+        self.visited = []
         self.spec = SimpleNamespace(reward_threshold=100)
         self.render_ready = False
         self.MAX_X = 20
@@ -117,7 +118,6 @@ class HeuristicTSPEnv(gym.Env):
             "route_length": spaces.Discrete(self.MAX_QUEUE+1),
             "rejections": spaces.Discrete(self.max_rejections + 1),
             "proposed_route": spaces.MultiDiscrete([max_queue_range]*self.MAX_QUEUE),
-            "t": spaces.Discrete(self.MAX_T),
             "request": spaces.Dict({
                 # "id": spaces.Discrete(max_queue_range),
                 "x": spaces.Discrete(self.MAX_X),
@@ -187,26 +187,38 @@ class HeuristicTSPEnv(gym.Env):
                 print(f'Missed deadline! {time + dt} vs. {cust["deadline"]}')
                 # print(f'Error: missed deadline of {cust["deadline"]}')
                 self.is_perfect = False
-                reward -= 3
+                if not done:
+                    reward -= 3
+                    perfect_log.append(0)
+                    done = True
                 time += dt
                 remaining[dest-1] = cust['deadline'] - time
-                perfect_log.append(0)
-                done = True
-                time = -1
+                # time = -1
                 # to_remove.append(i)
-                break
+                # break
             else:
                 time += dt
                 # remaining.append(cust['deadline']-time)
                 remaining[dest-1] = cust['deadline'] - time
                 vx = cust.get('x')
                 vy = cust.get('y')
+        if done:
+            time = -1
 
 
-        if len(self.planned_route) == self.MAX_QUEUE or done:
-            if len(self.planned_route) == self.MAX_QUEUE:
-                reward += 1
+        if len(self.planned_route) == self.MAX_QUEUE and not done:
+            first = self.customers.pop(self.planned_route.pop(0)-1)
+            self.t += self._get_travel_time(self.x, self.y, first)
+            self.x = first.get('x')
+            self.y = first.get('y')
+            self.visited.append(first)
+            for i in range(len(self.planned_route)):
+                self.planned_route[i] -= 1
+        
+        if len(self.visited) >= self.MAX_NODES:
             done = True
+
+        if done:
             perfect_log.append(1 if self.is_perfect else 0)
             # print(f"route: {self.planned_route}, customers: {self.customers}")
             self.proposed_route = self._propose_route()
@@ -224,23 +236,42 @@ class HeuristicTSPEnv(gym.Env):
                 print(f"Generated route: {self.planned_route}")
                 print(f"Time {time} vs. Proposed Time {self.proposed_time}")
                 fig, ax = plt.subplots(figsize=(12,8))
+                ax.set_xlim([0,20])
+                ax.set_ylim([0,20])
                 ax.set_title(f'{self.action_list}')
+                route = self.visited + self.planned_route
                 for i in range(len(self.customers)):
                     cust = self.customers[i]
                     col = 'g' if i == self.planned_route[-1]-1 else 'b'
                     ax.scatter(cust['x'], cust['y'], color=col, s=300)
-                    ax.annotate(f"$N_{i},d={cust['deadline']},dt={remaining[i]}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
+                    ax.annotate(f"$N_{i},d={cust['deadline']},t={cust['deadline'] - remaining[i]},dt={remaining[i]}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
+                for node in self.visited:
+                    col = 'black'
+                    ax.scatter(node['x'], node['y'], color=col, s=300)
+                    ax.annotate(f"$N_{i},d={node['deadline']}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
                 col = 'go' if time <= self.proposed_time else 'bo'
+                for i in range(len(self.visited) - 1):
+                    # print(f"i: {i}, custs: {len(self.customers)}, planned_route: {self.planned_route}, planned_route[i]: {self.planned_route[i]}")
+                    ax.plot([self.customers[self.planned_route[i]-1]['x'], self.customers[self.planned_route[i+1]-1]['x']],
+                        [self.customers[self.planned_route[i]-1]['y'], self.customers[self.planned_route[i+1]-1]['y']], col, linestyle='solid')
                 if time < 0:
                     col = 'yo'
-                ax.plot([0, self.customers[self.planned_route[0]-1]['x']],
-                    [0, self.customers[self.planned_route[0]-1]['y']], col, linestyle='solid')
+                if len(self.visited) > 0:
+                    ax.plot([0, self.visited[0]['x']],
+                        [0, self.visited[0]['y']], col, linestyle='solid')
+                    for i in range(len(self.visited)-1):
+                        ax.plot([self.visited[i]['x'], self.visited[i+1]['y']],
+                            [self.visited[i+1]['x'], self.visited[i+1]['y']])
+
+
+                ax.plot([self.x, self.customers[self.planned_route[0]-1]['x']],
+                    [self.y, self.customers[self.planned_route[0]-1]['y']], col, linestyle='solid')
                 for i in range(len(self.planned_route) - 1):
                     # print(f"i: {i}, custs: {len(self.customers)}, planned_route: {self.planned_route}, planned_route[i]: {self.planned_route[i]}")
                     ax.plot([self.customers[self.planned_route[i]-1]['x'], self.customers[self.planned_route[i+1]-1]['x']],
                         [self.customers[self.planned_route[i]-1]['y'], self.customers[self.planned_route[i+1]-1]['y']], col, linestyle='solid')
-                ax.plot([0, self.customers[self.proposed_route[0]-1]['x']],
-                    [0, self.customers[self.proposed_route[0]-1]['y']], 'ro', linestyle='--')
+                ax.plot([self.x, self.customers[self.proposed_route[0]-1]['x']],
+                    [self.y, self.customers[self.proposed_route[0]-1]['y']], 'ro', linestyle='--')
                 for i in range(len(self.proposed_route) - 1):
                     ax.plot([self.customers[self.proposed_route[i]-1]['x'], self.customers[self.proposed_route[i+1]-1]['x']],
                         [self.customers[self.proposed_route[i]-1]['y'], self.customers[self.proposed_route[i+1]-1]['y']], 'ro', linestyle='--')
@@ -284,6 +315,7 @@ class HeuristicTSPEnv(gym.Env):
         self.t = 0
         self.x = 0
         self.y = 0
+        self.visited = []
         self.nodes_proposed = 0
         self.proposed_time = 0
         self.step_count = 0
@@ -330,7 +362,7 @@ class HeuristicTSPEnv(gym.Env):
             # custs['id'].append(i)
             custs['x'].append(cust['x'])
             custs['y'].append(cust['y'])
-            custs['deadline'].append(cust['deadline'])
+            custs['deadline'].append(cust['deadline'] - self.t)
             i += 1
         
         while len(custs['x']) < self.MAX_QUEUE:
@@ -348,7 +380,6 @@ class HeuristicTSPEnv(gym.Env):
             planned.append(0)
 
         state = {
-            "t": self.t,
             "request": req,
             "customers": custs,
             "proposed_route": proposed,

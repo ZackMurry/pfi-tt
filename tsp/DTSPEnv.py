@@ -11,6 +11,10 @@ steps_log = []
 dist_log = []
 solved_log = []
 
+# todo: heuristic based approach like in Q-Learning paper!
+# heuristic: use closest neighbor (?) and then optimize
+# just copy the setup from the reference paper
+# this is top priority.
 class DTSPEnv(gym.Env):
     '''
     Dynamic Traveling Salesman Problem Environment
@@ -36,8 +40,7 @@ class DTSPEnv(gym.Env):
         self.step_count = 0
         self.nodes = np.arange(self.M)
         self.step_limit = 2*self.M
-        # self.obs_dim = 1+self.N**2
-        # obs_space = spaces.Box(-1, self.N, shape=(self.obs_dim,), dtype=np.int32)
+
         # Format: current node, time, visited, distance matrix, time requirements, time requirement for new node, new distance matrix column if accepted
         self.observation_space = spaces.MultiDiscrete([self.M] + [self.step_limit] + [2]*self.M + [20]*(self.M*(self.M-1)//2) + [self.step_limit]*self.M + [self.step_limit] + [20] * self.M)
         # Example: [ 0  1  0  0  0  0  0 54 77 94 79 54  0 23 40 41 77 23  0 17 28 94 40 17 0 27 79 41 28 27  0]

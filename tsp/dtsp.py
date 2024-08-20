@@ -72,6 +72,7 @@ net.to(device)
 optim = torch.optim.Adam(net.parameters(), lr=1e-3)
 
 # policy  = ts.policy.PPOPolicy(
+# Try double deep q-learning
 policy = ts.policy.DQNPolicy(
     model=net,
     optim=optim,
