@@ -1,6 +1,6 @@
 # import or_gym
 # from or_gym.utils import create_env
-from HeuristicTSPEnv import HeuristicTSPEnv, save_logs
+from SimpleHeuristicTSPEnv import SimpleHeuristicTSPEnv, save_logs
 import gymnasium as gym
 from gymnasium.wrappers import FlattenObservation
 import numpy as np
@@ -15,8 +15,8 @@ num_train_envs = 10
 torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
 gym.envs.register(
-     id='HeuristicTSPEnv-v0',
-     entry_point=HeuristicTSPEnv,
+     id='SimpleHeuristicTSPEnv-v0',
+     entry_point=SimpleHeuristicTSPEnv,
      max_episode_steps=50,
      kwargs={}
 )
@@ -31,8 +31,8 @@ device = torch.device('cuda')
 # train_envs = ts.env.ShmemVectorEnv([lambda: gym.make('HeuristicTSPEnv-v0') for _ in range(10)])
 # test_envs = ts.env.ShmemVectorEnv([lambda: gym.make('HeuristicTSPEnv-v0') for _ in range(100)])
 # train_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
-train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
-test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(1)])
+train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('SimpleHeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
+test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('SimpleHeuristicTSPEnv-v0')) for _ in range(1)])
 # train_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(num_train_envs)])
 # test_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
 
@@ -60,7 +60,7 @@ class Net(nn.Module):
         # print(f"logits: {logits}")
         return logits, state
 
-env = FlattenObservation(HeuristicTSPEnv())
+env = FlattenObservation(SimpleHeuristicTSPEnv())
 
 state_shape = env.observation_space.shape or env.observation_space.n
 print(f'State shape: {state_shape}')
@@ -99,7 +99,7 @@ result = ts.trainer.OffpolicyTrainer(
     policy=policy,
     train_collector=train_collector,
     test_collector=test_collector,
-    max_epoch=50, 
+    max_epoch=100, 
     step_per_epoch=10000,
     step_per_collect=10,
     update_per_step=0.1, episode_per_test=100, batch_size=64,

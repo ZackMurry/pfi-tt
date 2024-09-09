@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 perfect_log = []
 
-class HeuristicTSPEnv(gym.Env):
+class SimpleHeuristicTSPEnv(gym.Env):
     '''
     Bi-directional connections and uniform cost
 
@@ -115,8 +115,6 @@ class HeuristicTSPEnv(gym.Env):
         max_queue_range = self.MAX_QUEUE + 1
         self.observation_space = spaces.Dict({
             "planned_route": spaces.MultiDiscrete([max_queue_range]*self.MAX_QUEUE),
-            "route_length": spaces.Discrete(self.MAX_QUEUE+1),
-            # "rejections": spaces.Discrete(self.max_rejections + 1),
             "proposed_route": spaces.MultiDiscrete([max_queue_range]*self.MAX_QUEUE),
             "request": spaces.Dict({
                 # "id": spaces.Discrete(max_queue_range),
@@ -152,10 +150,7 @@ class HeuristicTSPEnv(gym.Env):
         reward = 0
         print(f"Action: {action}")
         if action == 0:
-            self.rejections += 1
-            if self.rejections > self.max_rejections:
-                print('Too many rejections!')
-                reward -= 4
+            reward -= 2
             self.request = None
             self.nodes_proposed -= 1
         elif self.request != None:
@@ -164,7 +159,12 @@ class HeuristicTSPEnv(gym.Env):
             self.customers.append(self.request)
             self.planned_route.insert(action-1, len(self.customers))
             self.request = None
-            reward += 1
+            reward += 2
+            if len(self.planned_route) >= 2:
+                print(f"Customers: {self.customers}, a-2: {action-2}, a-1: {action-1}")
+                reward -= self._node_dist_manhattan(action-2, action - 1)
+            else:
+                reward -= self.customers[-1].get('x') + self.customers[-1].get('y')
         else:
             reward -= 2 # No request made
             self.is_perfect = False
@@ -186,7 +186,6 @@ class HeuristicTSPEnv(gym.Env):
             if time + dt > cust['deadline']:
                 print(f'Missed deadline! {time + dt} vs. {cust["deadline"]}')
                 # print(f'Error: missed deadline of {cust["deadline"]}')
-                self.is_perfect = False
                 if not done:
                     reward -= 3
                     perfect_log.append(0)
@@ -215,10 +214,6 @@ class HeuristicTSPEnv(gym.Env):
         #     for i in range(len(self.planned_route)):
         #         self.planned_route[i] -= 1
         
-        if len(self.visited) >= self.MAX_NODES:
-            reward += 3
-            done = True
-
         if done:
             perfect_log.append(1 if self.is_perfect else 0)
             # print(f"route: {self.planned_route}, customers: {self.customers}")
@@ -290,10 +285,10 @@ class HeuristicTSPEnv(gym.Env):
         return np.sqrt(self._node_sqdist(a, b))
 
     def _node_dist_manhattan(self, a, b):
-        apt = self.locations[a]
-        bpt = self.locations[b]
-        dx = apt[0] - bpt[0]
-        dy = apt[1] - bpt[1]
+        apt = self.customers[a]
+        bpt = self.customers[b]
+        dx = apt['x'] - bpt['x']
+        dy = apt['y'] - bpt['y']
         return abs(dx) + abs(dy)
 
     def _node_sqdist(self, a, b):
@@ -391,7 +386,7 @@ class HeuristicTSPEnv(gym.Env):
             "customers": custs,
             "proposed_route": proposed,
             "planned_route": planned,
-            "route_length": len(self.planned_route),
+            # "route_length": len(self.planned_route),
             # "rejections": min(self.rejections, 2)
         }
         # print(f'state: {state}')
