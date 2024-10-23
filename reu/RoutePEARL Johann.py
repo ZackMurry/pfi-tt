@@ -311,6 +311,8 @@ for episode in range(episodes):
 # Main loop for the trained agent
 
 
+print(total_rewards)
+
 # running = True
 # target = None
 # delivered = False
@@ -384,9 +386,9 @@ for episode in range(episodes):
 #     pygame.display.flip()
 
 #     time.sleep(0.01)
-print("final path")
-for p in path:
-    print(p)
+# print("final path")
+# for p in path:
+#     print(p)
 
 pygame.quit()
 sys.exit()

@@ -163,6 +163,7 @@ def trace_path(cells, dest):
         reward = get_reward(i, customer, emergency, depot, first_delivered, truck, 1)
         print(f"Reward: {reward}")
         path_reward += reward
+        sleep(0.05)
     
     total_reward += path_reward
     print(f"Path reward: {path_reward}")

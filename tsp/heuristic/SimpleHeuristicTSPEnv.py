@@ -99,8 +99,8 @@ class SimpleHeuristicTSPEnv(gym.Env):
             #     "deadline": 30
             # },
         ] # id, x, y, deadline
-        self.proposed_route = []
-        self.planned_route = []
+        self.proposed_route = np.array()
+        self.planned_route = np.array()
         self.action_list = []
         self.depot = {
             "x": 0,
@@ -312,18 +312,18 @@ class SimpleHeuristicTSPEnv(gym.Env):
         self.t = 0
         self.x = 0
         self.y = 0
-        self.visited = []
+        self.visited = np.array()
         self.nodes_proposed = 0
         self.proposed_time = 0
         self.step_count = 0
         self.rejections = 0
-        self.customers = []
+        self.customers = np.array()
         # self.request = None
         self.request = self._generate_request()
         # self.generate_1d_distance_matrix()
         self.proposed_route = self._propose_route()
-        self.planned_route = []
-        self.action_list = []
+        self.planned_route = np.array()
+        self.action_list = np.array()
         self._update_state()
         return self.state
         
@@ -355,9 +355,9 @@ class SimpleHeuristicTSPEnv(gym.Env):
         #     }
         custs = {
             # "id": [],
-            "x": [],
-            "y": [],
-            "deadline": []
+            "x": np.array(),
+            "y": np.array(),
+            "deadline": np.array()
         }
         i = 1
         for cust in self.customers:
@@ -396,8 +396,8 @@ class SimpleHeuristicTSPEnv(gym.Env):
     def _propose_route(self):
         x = self.depot.get('x')
         y = self.depot.get('y')
-        visited = []
-        to_visit = []
+        visited = np.array()
+        to_visit = np.array()
         for i in range(len(self.customers)):
             to_visit.append({
                 "id": i,

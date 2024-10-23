@@ -1,1 +1,5 @@
 *.png
+tsp/heuristic/results/*.png
+*.pyc
+tsp/heuristic/.venv-heuristic
+
