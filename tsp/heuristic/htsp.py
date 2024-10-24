@@ -1,7 +1,8 @@
 # import or_gym
 # from or_gym.utils import create_env
 #from SimpleHeuristicTSPEnv import SimpleHeuristicTSPEnv, save_logs
-from HeuristicTSPEnv import HeuristicTSPEnv, save_logs
+# from HeuristicTSPEnv import HeuristicTSPEnv, save_logs
+from HeuristicTruckDroneEnv import HeuristicTruckDroneEnv, save_logs
 import gymnasium as gym
 from gymnasium.wrappers import FlattenObservation
 import numpy as np
@@ -18,8 +19,8 @@ num_train_envs = 1
 gym.envs.register(
      #id='SimpleHeuristicTSPEnv-v0',
      #entry_point=SimpleHeuristicTSPEnv,
-     id='HeuristicTSPEnv-v0',
-     entry_point=HeuristicTSPEnv,
+     id='HeuristicTruckDroneEnv-v0',
+     entry_point=HeuristicTruckDroneEnv,
      max_episode_steps=50,
      kwargs={}
 )
@@ -34,8 +35,8 @@ print(f"CUDA: {torch.cuda.is_available()}")
 # train_envs = ts.env.ShmemVectorEnv([lambda: gym.make('HeuristicTSPEnv-v0') for _ in range(10)])
 # test_envs = ts.env.ShmemVectorEnv([lambda: gym.make('HeuristicTSPEnv-v0') for _ in range(100)])
 # train_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
-train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
-test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(1)])
+train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTruckDroneEnv-v0')) for _ in range(num_train_envs)])
+test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTruckDroneEnv-v0')) for _ in range(1)])
 # train_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(num_train_envs)])
 # test_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
 
@@ -63,7 +64,7 @@ class Net(nn.Module):
         # print(f"logits: {logits}")
         return logits, state
 
-env = FlattenObservation(HeuristicTSPEnv())
+env = FlattenObservation(HeuristicTruckDroneEnv())
 
 state_shape = env.observation_space.shape or env.observation_space.n
 print(f'State shape: {state_shape}')
