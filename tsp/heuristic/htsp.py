@@ -11,34 +11,40 @@ import tianshou as ts
 import torch
 
 
-num_train_envs = 1
+num_train_envs = 10
 
 
 # torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
 gym.envs.register(
-     #id='SimpleHeuristicTSPEnv-v0',
-     #entry_point=SimpleHeuristicTSPEnv,
+    #  id='SimpleHeuristicTSPEnv-v0',
+    #  entry_point=SimpleHeuristicTSPEnv,
      id='HeuristicTruckDroneEnv-v0',
      entry_point=HeuristicTruckDroneEnv,
-     max_episode_steps=50,
-     kwargs={}
+    # id='HeuristicTSPEnv-v0',
+    # entry_point=HeuristicTSPEnv,
+    max_episode_steps=50,
+    kwargs={}
 )
 
 print(ts.__version__)
 print(f"CUDA: {torch.cuda.is_available()}")
-# device = torch.device('cuda')
 # import envpool
-# train_envs = envpool.make_gymnasium("TSPEnv-v0", num_envs=10)
-# test_envs = envpool.make_gymnasium("TSPEnv-v0", num_envs=100)
 
 # train_envs = ts.env.ShmemVectorEnv([lambda: gym.make('HeuristicTSPEnv-v0') for _ in range(10)])
 # test_envs = ts.env.ShmemVectorEnv([lambda: gym.make('HeuristicTSPEnv-v0') for _ in range(100)])
 # train_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
-train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTruckDroneEnv-v0')) for _ in range(num_train_envs)])
-test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTruckDroneEnv-v0')) for _ in range(1)])
-# train_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(num_train_envs)])
-# test_envs = ts.env.DummyVectorEnv([lambda: gym.make('TSPEnv-v0') for _ in range(100)])
+# train_envs = ts.env.SubprocVectorEnv([lambda: gym.make('HeuristicTruckDroneEnv-v0') for _ in range(num_train_envs)])
+# test_envs = ts.env.SubprocVectorEnv([lambda: gym.make('HeuristicTruckDroneEnv-v0') for _ in range(100)])
+
+train_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTruckDroneEnv-v0')) for _ in range(num_train_envs)])
+test_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTruckDroneEnv-v0')) for _ in range(1)])
+
+# train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTruckDroneEnv-v0')) for _ in range(num_train_envs)])
+# test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTruckDroneEnv-v0')) for _ in range(1)])
+# train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
+# test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(1)])
+
 
 import torch, numpy as np
 from torch import nn
@@ -65,6 +71,7 @@ class Net(nn.Module):
         return logits, state
 
 env = FlattenObservation(HeuristicTruckDroneEnv())
+# env = FlattenObservation(HeuristicTSPEnv())
 
 state_shape = env.observation_space.shape or env.observation_space.n
 print(f'State shape: {state_shape}')

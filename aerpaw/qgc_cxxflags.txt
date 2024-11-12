@@ -1,0 +1,2 @@
+export CXXFLAGS="${CXX_FLAGS} -Wno-error=template-id-cdtor"
+

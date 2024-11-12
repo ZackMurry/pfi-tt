@@ -86,6 +86,46 @@ class TSPScenario():
         "y": 9,
         "deadline": 115
       },
+      {
+        "x": 19,
+        "y": 2,
+        "deadline": 120
+      },
+      {
+        "x": 17,
+        "y": 7,
+        "deadline": 125
+      },
+      {
+        "x": 19,
+        "y": 18,
+        "deadline": 130
+      },
+      {
+        "x": 3,
+        "y": 18,
+        "deadline": 135
+      },
+      {
+        "x": 4,
+        "y": 8,
+        "deadline": 140
+      },
+      {
+        "x": 19,
+        "y": 8,
+        "deadline": 145
+      },
+      {
+        "x": 18,
+        "y": 7,
+        "deadline": 150
+      },
+      {
+        "x": 2,
+        "y": 19,
+        "deadline": 155
+      },
     ]
     for req in self.requests:
       req['deadline'] *= 1

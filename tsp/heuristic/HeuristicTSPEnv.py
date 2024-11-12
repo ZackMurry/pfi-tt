@@ -18,9 +18,9 @@ class HeuristicTSPEnv(gym.Env):
         self.t = 0
         self.x = 0
         self.y = 0
-        self.MAX_T = 116
-        self.MAX_NODES = 25
-        self.MAX_QUEUE = 15
+        self.MAX_T = 156
+        self.MAX_NODES = 35
+        self.MAX_QUEUE = 25
         self.nodes_proposed = 0
         self.use_dataset = False
         self.step_count = 0

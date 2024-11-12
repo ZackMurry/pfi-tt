@@ -9,22 +9,24 @@ from time import sleep
 from datetime import datetime
 from types import SimpleNamespace
 from TSPScenario import TSPScenario
+from math import pow, sqrt
 
 # todo: add requirement for truck and drone to end at depot
 # todo: fix bug with some drone dests not showing routes
+# todo: add dynamic by fixing some part of the route
 class HeuristicTruckDroneEnv(gym.Env):
     def __init__(self, *args, **kwargs):
         self.min_time = 999999
-        self.DRONE_SPEED_FACTOR = 0.5
+        self.DRONE_SPEED_FACTOR = 1
         self.SHOW_HEURISTIC = False
-        self.max_nodes_reached = 0
+        self.max_nodes_reached = 15
         self.scenario = TSPScenario()
         self.t = 0
         self.x = 0
         self.y = 0
-        self.MAX_T = 116
+        self.MAX_T = 151
         self.MAX_NODES = 25
-        self.MAX_QUEUE = 10
+        self.MAX_QUEUE = 15
         self.nodes_proposed = 0
         self.use_dataset = False
         self.step_count = 0
@@ -106,12 +108,14 @@ class HeuristicTruckDroneEnv(gym.Env):
                         if self.request != None:
                             self.planned_route.append(0)
                             self.drone_route.append(len(self.customers))
-                            reward += 1
+                            self.drone_with_truck = False
                         else:
                             reward -= 1
                             print(f"Error: no request made (drone); {self.action_list}")
                     else:
                         self.planned_route.append(0)
+                        self.drone_with_truck = True
+                        reward += 1 # Give reward once truck collects drone (avoids ending without collecting)
 
                 else:
                     self.planned_route.insert(action, len(self.customers))
@@ -151,6 +155,7 @@ class HeuristicTruckDroneEnv(gym.Env):
                     drone_time += dt / self.DRONE_SPEED_FACTOR
                     drone_idx += 1
                     time += max(drone_time - (time - drone_start_time), 0)
+                    dwt = True
                 continue
 
 
@@ -167,7 +172,7 @@ class HeuristicTruckDroneEnv(gym.Env):
                 vy = cust.get('y')
         
 
-        if time > 0:
+        if time > 0 and dwt:
             if self.max_nodes_reached == len(self.planned_route):
                 if self.min_time > time:
                     self.min_time = time
@@ -175,20 +180,48 @@ class HeuristicTruckDroneEnv(gym.Env):
                     fig, ax = plt.subplots(figsize=(12,8))
                     ax.set_xlim([0,20])
                     ax.set_ylim([0,20])
+                    ax.set_xticks([0,2,4,6,8,10,12,14,16,18,20])
+                    ax.set_yticks([0,2,4,6,8,10,12,14,16,18,20])
                     ax.set_title(f'{self.action_list}')
-                    route = self.visited + self.planned_route
-                    for i in range(len(self.customers)):
-                        cust = self.customers[i]
-                        col = 'g' if i == self.planned_route[-1]-1 else 'b'
-                        ax.scatter(cust['x'], cust['y'], color=col, s=300)
-                        ax.annotate(f"$N_{i},d={cust['deadline']},t={cust['deadline'] - remaining[i]}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
+                    # route = self.visited + self.planned_route
+                    dwt = True
+                    drone_idx = 0
+                    node_idx = 1
+                    drawn = []
+                    for i in range(len(self.planned_route)):
+                        act = self.planned_route[i]
+                        if act == 0:
+                            if dwt:
+                                cust_id = self.drone_route[drone_idx]-1
+                                cust = self.customers[cust_id]
+                                ax.scatter(cust['x'], cust['y'], color='tab:pink', s=200)
+                                ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - remaining[cust_id])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
+                                node_idx += 1
+                                drawn.append(cust_id)
+                            else:
+                                drone_idx += 1 
+                            dwt = not dwt
+                        elif (act-1) not in drawn:
+                            cust = self.customers[act-1]
+                            ax.scatter(cust['x'], cust['y'], color='b', s=300)
+                            ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - remaining[act-1])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
+                            node_idx += 1
+                            drawn.append(act-1)
+
+
+
+                    # for i in range(len(self.customers)):
+                    #     cust = self.customers[i]
+                    #     col = 'g' if i == self.planned_route[-1]-1 else 'b'
+                    #     ax.scatter(cust['x'], cust['y'], color=col, s=300)
+                    #     ax.annotate(f"$N_{i},d={cust['deadline']},t={cust['deadline'] - remaining[i]}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
                     for rej in self.rejected:
                         ax.scatter(rej['x'], rej['y'], color='red', s=100)
-                    for node in self.visited:
-                        col = 'black'
-                        ax.scatter(node['x'], node['y'], color=col, s=300)
-                        ax.annotate(f"$N_{i},d={node['deadline']}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
-                    col = 'go' if time <= self.proposed_time else 'bo'
+                    # for node in self.visited:
+                    #     col = 'black'
+                    #     ax.scatter(node['x'], node['y'], color=col, s=300)
+                    #     ax.annotate(f"$N_{i},d={node['deadline']}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
+                    col = 'bo'
                     for i in range(len(self.visited) - 1):
                         ax.plot([self.customers[self.planned_route[i]-1]['x'], self.customers[self.planned_route[i+1]-1]['x']],
                             [self.customers[self.planned_route[i]-1]['y'], self.customers[self.planned_route[i+1]-1]['y']], col, linestyle='solid')
@@ -201,16 +234,21 @@ class HeuristicTruckDroneEnv(gym.Env):
                             ax.plot([self.visited[i]['x'], self.visited[i+1]['y']],
                                 [self.visited[i+1]['x'], self.visited[i+1]['y']])
                     
-                    for dd in self.drone_route:
-                        cust = self.customers[dd-1]
-                        ax.scatter(cust['x'], cust['y'], color='tab:pink', s=200)
+                    # for dd in self.drone_route:
+                    #     cust = self.customers[dd-1]
+                    #     ax.scatter(cust['x'], cust['y'], color='tab:pink', s=200)
 
 
-                    ax.plot([self.x, self.customers[self.planned_route[0]-1]['x']],
-                        [self.y, self.customers[self.planned_route[0]-1]['y']], col, linestyle='solid')
-                    for i in range(len(self.planned_route) - 1):
-                        ax.plot([self.customers[self.planned_route[i]-1]['x'], self.customers[self.planned_route[i+1]-1]['x']],
-                            [self.customers[self.planned_route[i]-1]['y'], self.customers[self.planned_route[i+1]-1]['y']], col, linestyle='solid')
+                    truck_route = []
+                    for dest in self.planned_route:
+                        if dest != 0:
+                            truck_route.append(dest)
+                    if len(truck_route) > 0:
+                        ax.plot([self.x, self.customers[truck_route[0]-1]['x']],
+                            [self.y, self.customers[truck_route[0]-1]['y']], col, linestyle='solid')
+                    for i in range(len(truck_route) - 1):
+                        ax.plot([self.customers[truck_route[i]-1]['x'], self.customers[truck_route[i+1]-1]['x']],
+                            [self.customers[truck_route[i]-1]['y'], self.customers[truck_route[i+1]-1]['y']], col, linestyle='solid')
                     if len(self.proposed_route) > 0 and self.SHOW_HEURISTIC:
                         ax.plot([self.x, self.customers[self.proposed_route[0]-1]['x']],
                             [self.y, self.customers[self.proposed_route[0]-1]['y']], 'ro', linestyle='--')
@@ -236,15 +274,16 @@ class HeuristicTruckDroneEnv(gym.Env):
                                 drone_idx += 1
 
                             dwt = not dwt
-                        cust = self.customers[dest-1]
-                        vx = cust.get('x')
-                        vy = cust.get('y')
+                        else:
+                            cust = self.customers[dest-1]
+                            vx = cust.get('x')
+                            vy = cust.get('y')
 
 
 
 
                     current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                    fig.savefig(f"results/n-{self.max_nodes_reached}-t-{round(time)}.png")
+                    fig.savefig(f"results/n-{self.max_nodes_reached}-t-{round(time, 2)}.png")
             elif self.max_nodes_reached < len(self.planned_route):
                 self.min_time = time
                 self.max_nodes_reached = len(self.planned_route)
@@ -391,6 +430,9 @@ class HeuristicTruckDroneEnv(gym.Env):
 
     def _get_travel_time(self, x, y, customer):
         return abs(customer.get('x') - x) + abs(customer.get('y') - y)      
+
+    def _get_travel_time_diag(self, x, y, customer):
+        return sqrt(pow(customer.get('x') - x, 2) + pow(customer.get('y') - y, 2))
 
     def generate_1d_distance_matrix(self):
         matrix = []
