@@ -3,6 +3,7 @@
 #from SimpleHeuristicTSPEnv import SimpleHeuristicTSPEnv, save_logs
 # from HeuristicTSPEnv import HeuristicTSPEnv, save_logs
 from HeuristicTruckDroneEnv import HeuristicTruckDroneEnv, save_logs
+from TSPScenario import TSPScenario
 import gymnasium as gym
 from gymnasium.wrappers import FlattenObservation
 import numpy as np
@@ -11,7 +12,7 @@ import tianshou as ts
 import torch
 
 
-num_train_envs = 10
+num_train_envs = 1
 
 
 # torch.set_default_tensor_type(torch.cuda.FloatTensor)
@@ -45,6 +46,8 @@ test_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('Heuris
 # train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
 # test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(1)])
 
+print('Saving scenario to file')
+TSPScenario().export()
 
 import torch, numpy as np
 from torch import nn

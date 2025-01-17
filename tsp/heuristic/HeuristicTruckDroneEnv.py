@@ -49,6 +49,7 @@ class HeuristicTruckDroneEnv(gym.Env):
         }
         self.drone_with_truck = True
         self.drone_route = []
+        self.allow_drone = 0
 
         self.step_limit = self.MAX_QUEUE + 2
         self.proposed_time = 0
@@ -74,6 +75,7 @@ class HeuristicTruckDroneEnv(gym.Env):
                 "y": spaces.MultiDiscrete([self.MAX_Y]*self.MAX_QUEUE),
                 "deadline": spaces.MultiDiscrete([self.MAX_T]*self.MAX_QUEUE)
             }),
+            "allow_drone": spaces.Discrete(2) # 0 = only truck, 1 = truck+drone
             # "rejections": spaces.Discrete(self.max_rejections + 1),
         })
 
@@ -103,6 +105,9 @@ class HeuristicTruckDroneEnv(gym.Env):
             if len(self.customers) < self.MAX_QUEUE:
                 self.customers.append(self.request)
                 if action == 0: # Send drone to capture request!
+                    if not self.allow_drone:
+                        reward -= 10
+                        done = True
                     if self.drone_with_truck:
                         # Send drone to next customer
                         if self.request != None:
@@ -178,6 +183,19 @@ class HeuristicTruckDroneEnv(gym.Env):
                     self.min_time = time
                     print(f"Min time for {self.max_nodes_reached}: {self.min_time}")
                     fig, ax = plt.subplots(figsize=(12,8))
+                    # todo: export to file in standardized data format for AERPAW script
+
+                    with open(f"results/n-{self.max_nodes_reached}-t-{round(time, 2)}.plan", 'w') as f:
+                        f.write(f"{len(self.planned_route)}\n")
+                        for act in self.planned_route:
+                            f.write(f"{act} ")
+                        f.write('\n')
+                        f.write(f"{len(self.drone_route)}\n")
+                        for d_act in self.drone_route:
+                            f.write(f"{d_act} ")
+                        f.write('\n')
+
+
                     ax.set_xlim([0,20])
                     ax.set_ylim([0,20])
                     ax.set_xticks([0,2,4,6,8,10,12,14,16,18,20])
@@ -382,6 +400,7 @@ class HeuristicTruckDroneEnv(gym.Env):
             "planned_route": np.array(planned),
             "drone_route": np.array(drone_r),
             "route_length": len(self.planned_route),
+            "allow_drone": self.allow_drone
             # "rejections": min(self.rejections, 2)
         }
         # print(f'state: {state}')
