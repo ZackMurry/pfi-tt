@@ -4,10 +4,47 @@ from aerpawlib.util import Coordinate, VectorNED
 import asyncio
 from sys import exit
 import random
+import torch
+from torch import nn
+import numpy as np
+from HeuristicTruckDroneEnv import HeuristicTruckDroneEnv
+from gymnasium.wrappers import FlattenObservation
+
+class Net(torch.nn.Module):
+    def __init__(self, state_shape, action_shape):
+        super().__init__()
+        self.model = nn.Sequential(
+            nn.Linear(np.prod(state_shape), 128), nn.ReLU(inplace=True),
+            nn.Linear(128, 128), nn.ReLU(inplace=True),
+            nn.Linear(128, 128), nn.ReLU(inplace=True),
+            nn.Linear(128, 128), nn.ReLU(inplace=True), # new
+            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
+            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
+            nn.Linear(128, np.prod(action_shape))#, device=device),
+        )
+
+    def forward(self, obs, state=None, info={}):
+        if not isinstance(obs, torch.Tensor):
+            obs = torch.tensor(obs, dtype=torch.float)#, device=device)
+        batch = obs.shape[0]
+        logits = self.model(obs.view(batch, -1))
+        # print(f"logits: {logits}")
+        return logits, state
 
 print('Starting...')
 
 ZMQ_COORDINATOR = 'COORDINATOR'
+
+env = FlattenObservation(HeuristicTruckDroneEnv())
+state_shape = env.observation_space.shape or env.observation_space.n
+print(f'State shape: {state_shape}')
+action_shape = env.action_space.shape or env.action_space.n
+print(f"action shape: {action_shape}")
+
+model = Net(state_shape, action_shape)
+model.load_state_dict(torch.load("netdis_policy.pth"))
+
+
 
 class DQNDrone(ZmqStateMachine):
 
