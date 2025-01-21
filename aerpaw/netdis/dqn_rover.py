@@ -96,6 +96,9 @@ class DQNRover(ZmqStateMachine):
     
     @state(name="step")
     async def step(self, _):
+        if not self._takeoff_ordered:
+            print('Received premature step!')
+            return "take_off"
         self._next_step = True
         return "wait_for_step"
 
