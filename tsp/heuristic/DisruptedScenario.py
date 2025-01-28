@@ -158,7 +158,7 @@ class DisruptedScenario():
     for req in self.requests:
       req['deadline'] *= 1
       if self.random_disruptions:
-        if random() < 0.25:
+        if random() < 0.15:
           req['disrupted'] = 1
         else:
           req['disrupted'] = 0

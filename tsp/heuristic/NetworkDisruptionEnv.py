@@ -25,7 +25,7 @@ class NetworkDisruptionEnv(gym.Env):
         self.y = 0
         self.MAX_T = 151
         self.MAX_NODES = 25
-        self.MAX_QUEUE = 8
+        self.MAX_QUEUE = 10
         self.max_nodes_reached = self.MAX_QUEUE
         self.nodes_proposed = 0
         self.use_dataset = False
@@ -96,6 +96,7 @@ class NetworkDisruptionEnv(gym.Env):
         self.step_count += 1
         
         reward = 0
+        ended = False
         # print(f"Action: {action}")
         if action == -1:
             self.rejections += 1
@@ -106,22 +107,29 @@ class NetworkDisruptionEnv(gym.Env):
             if len(self.customers) < self.MAX_QUEUE:
                 self.customers.append(self.request)
                 if action == 0: # Send drone to capture request!
+                    print('drone')
                     if self.request['disrupted']:
-                        reward -= 10
-                        done = True
+                        # print(self.request)
+                        reward -= 5
+                        # done = True`
+                    # else:
+                    #     reward += 1
+                    
+                    # if len(self.planned_route) > 3 and self.planned_route[-1] == 0: # Penalize making truck wait for drone to go out and come back
+                    #     print(f'Penalizing drone action on {self.planned_route}')
+                    #     reward -= 0.5
+
+
                     if self.drone_with_truck:
                         # Send drone to next customer
-                        if self.request != None:
-                            self.planned_route.append(0)
-                            self.drone_route.append(len(self.customers))
-                            self.drone_with_truck = False
-                        else:
-                            reward -= 1
-                            print(f"Error: no request made (drone); {self.action_list}")
+                        self.planned_route.append(0)
+                        self.drone_route.append(len(self.customers))
+                        self.drone_with_truck = False
+                        # reward += 0.5
                     else:
                         self.planned_route.append(0)
                         self.drone_with_truck = True
-                        reward += 1 # Give reward once truck collects drone (avoids ending without collecting)
+                        reward += 1.5 # Give reward once truck collects drone (avoids ending without collecting)
 
                 else:
                     self.planned_route.insert(action, len(self.customers))
@@ -183,7 +191,7 @@ class NetworkDisruptionEnv(gym.Env):
                 if self.min_time > time:
                     self.min_time = time
                     print(f"Min time for {self.max_nodes_reached}: {self.min_time}")
-                    self.draw_env(time, remaining)
+                    # self.draw_env(time, remaining)
             elif self.max_nodes_reached < len(self.planned_route):
                 self.min_time = time
                 self.max_nodes_reached = len(self.planned_route)
@@ -191,8 +199,12 @@ class NetworkDisruptionEnv(gym.Env):
 
         self._update_state()
         
-        if self.draw_all and (done or self.step_count >= self.step_limit):
+        # if self.draw_all and (done or self.step_count >= self.step_limit):
+        if (self.episodes % 1000 == 0 or (self.episodes > 10000 and self.episodes % 250 == 0)) and (done or self.step_count >= self.step_limit):
             self.draw_env(time, remaining)
+        
+        # if self.step_count >= self.step_limit and not dwt:
+            # reward -= 5
 
         return self.state, reward, done, (self.step_count >= self.step_limit), {}
     
@@ -380,7 +392,7 @@ class NetworkDisruptionEnv(gym.Env):
         fig, ax = plt.subplots(figsize=(12,8))
         # todo: export to file in standardized data format for AERPAW script
 
-        with open(f"results/n-{self.max_nodes_reached}-t-{round(time, 2)}.plan", 'w') as f:
+        with open(f"results/ep-{self.episodes}-n-{self.max_nodes_reached}-t-{round(time, 2)}.plan", 'w') as f:
             f.write(f"{len(self.planned_route)}\n")
             for act in self.planned_route:
                 f.write(f"{act} ")
@@ -407,7 +419,11 @@ class NetworkDisruptionEnv(gym.Env):
                 if dwt:
                     cust_id = self.drone_route[drone_idx]-1
                     cust = self.customers[cust_id]
-                    ax.scatter(cust['x'], cust['y'], color='tab:pink', s=200, marker='.')
+                    mark = '.'
+                    if cust['disrupted'] == 1:
+                        # print('drawing disrupted')
+                        mark = 's'
+                    ax.scatter(cust['x'], cust['y'], color='tab:pink', s=200, marker=mark)
                     ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - remaining[cust_id])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
                     node_idx += 1
                     drawn.append(cust_id)
@@ -500,7 +516,7 @@ class NetworkDisruptionEnv(gym.Env):
 
 
         current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        fig.savefig(f"results/n-{self.max_nodes_reached}-t-{round(time, 2)}.png")
+        fig.savefig(f"results/ep-{self.episodes}-n-{self.max_nodes_reached}-t-{round(time, 2)}.png")
 
 
 
