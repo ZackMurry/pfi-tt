@@ -28,12 +28,12 @@ class DisruptedScenario():
         "deadline": 34,
         "disrupted": 1
       },
-      {
-        "x": 19,
-        "y": 18,
-        "deadline": 40,
-        "disrupted": 0
-      },
+      # {
+      #   "x": 19,
+      #   "y": 18,
+      #   "deadline": 40,
+      #   "disrupted": 0
+      # },
       {
         "x": 2,
         "y": 4,

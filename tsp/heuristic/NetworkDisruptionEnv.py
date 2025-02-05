@@ -76,7 +76,7 @@ class NetworkDisruptionEnv(gym.Env):
                 "x": spaces.MultiDiscrete([self.MAX_X]*self.MAX_QUEUE),
                 "y": spaces.MultiDiscrete([self.MAX_Y]*self.MAX_QUEUE),
                 "deadline": spaces.MultiDiscrete([self.MAX_T]*self.MAX_QUEUE),
-                "disrupted": spaces.MultiDiscrete([2]*self.MAX_QUEUE)
+                # "disrupted": spaces.MultiDiscrete([2]*self.MAX_QUEUE)
             }),
         })
 
@@ -107,17 +107,18 @@ class NetworkDisruptionEnv(gym.Env):
             if len(self.customers) < self.MAX_QUEUE:
                 self.customers.append(self.request)
                 if action == 0: # Send drone to capture request!
-                    print('drone')
+                    # print('drone')
                     if self.request['disrupted']:
                         # print(self.request)
-                        reward -= 5
+                        reward -= 10
+                        done = True
                         # done = True`
                     # else:
                     #     reward += 1
                     
-                    # if len(self.planned_route) > 3 and self.planned_route[-1] == 0: # Penalize making truck wait for drone to go out and come back
-                    #     print(f'Penalizing drone action on {self.planned_route}')
-                    #     reward -= 0.5
+                    if len(self.planned_route) > 1 and self.planned_route[-1] == 0: # Penalize making truck wait for drone to go out and come back
+                        print(f'Penalizing drone action on {self.planned_route}')
+                        reward -= 5
 
 
                     if self.drone_with_truck:
@@ -125,11 +126,11 @@ class NetworkDisruptionEnv(gym.Env):
                         self.planned_route.append(0)
                         self.drone_route.append(len(self.customers))
                         self.drone_with_truck = False
-                        # reward += 0.5
+                        reward += 1 # 1 before, 2 after is best so far
                     else:
                         self.planned_route.append(0)
                         self.drone_with_truck = True
-                        reward += 1.5 # Give reward once truck collects drone (avoids ending without collecting)
+                        reward += 2 # Give reward once truck collects drone (avoids ending without collecting)
 
                 else:
                     self.planned_route.insert(action, len(self.customers))
@@ -262,21 +263,21 @@ class NetworkDisruptionEnv(gym.Env):
             "x": [],
             "y": [],
             "deadline": [],
-            "disrupted": []
+            # "disrupted": []
         }
         i = 1
         for cust in self.customers:
             custs['x'].append(cust['x'])
             custs['y'].append(cust['y'])
             custs['deadline'].append(cust['deadline'] - self.t)
-            custs['disrupted'].append(cust['disrupted'])
+            # custs['disrupted'].append(cust['disrupted'])
             i += 1
         
         while len(custs['x']) < self.MAX_QUEUE:
             custs['x'].append(0)
             custs['y'].append(0)
             custs['deadline'].append(0)
-            custs['disrupted'].append(0)
+            # custs['disrupted'].append(0)
 
         proposed = self.proposed_route.copy()
         while len(proposed) < self.MAX_QUEUE:
@@ -296,7 +297,7 @@ class NetworkDisruptionEnv(gym.Env):
                 "x": np.array(custs['x']),
                 "y": np.array(custs['y']),
                 "deadline": np.array(custs['deadline']),
-                "disrupted": np.array(custs['disrupted'])
+                # "disrupted": np.array(custs['disrupted'])
             },
             "proposed_route": np.array(proposed),
             "planned_route": np.array(planned),
