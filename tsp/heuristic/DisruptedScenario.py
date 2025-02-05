@@ -170,7 +170,7 @@ class DisruptedScenario():
     return self.requests.pop(0)
 
   def export(self):
-    with open(f"export_{len(self.requests)}.scenario", 'w') as f:
+    with open(f"export_{len(self.requests)}-nd.scenario", 'w') as f:
       f.write(f"{len(self.requests)}\n")
       for req in self.requests:
         f.write(f"{req['x']} {req['y']} {req['deadline']}\n")

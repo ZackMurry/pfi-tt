@@ -2,8 +2,9 @@
 # from or_gym.utils import create_env
 #from SimpleHeuristicTSPEnv import SimpleHeuristicTSPEnv, save_logs
 # from HeuristicTSPEnv import HeuristicTSPEnv, save_logs
-from NetworkDisruptionEnv import NetworkDisruptionEnv, save_logs
-from TSPScenario import TSPScenario
+# from NetworkDisruptionEnv import NetworkDisruptionEnv, save_logs
+from LiveNetDisEnv import LiveNetDisEnv, save_logs
+from DisruptedScenario import DisruptedScenario
 import gymnasium as gym
 from gymnasium.wrappers import FlattenObservation
 import numpy as np
@@ -21,7 +22,7 @@ gym.envs.register(
     #  id='SimpleHeuristicTSPEnv-v0',
     #  entry_point=SimpleHeuristicTSPEnv,
      id='NetworkDisruptionEnv-v0',
-     entry_point=NetworkDisruptionEnv,
+     entry_point=LiveNetDisEnv,
     # id='HeuristicTSPEnv-v0',
     # entry_point=HeuristicTSPEnv,
     max_episode_steps=50,
@@ -47,7 +48,7 @@ test_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('Networ
 # test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(1)])
 
 print('Saving scenario to file')
-TSPScenario().export()
+DisruptedScenario().export()
 
 import torch, numpy as np
 from torch import nn
@@ -73,7 +74,7 @@ class Net(nn.Module):
         # print(f"logits: {logits}")
         return logits, state
 
-env = FlattenObservation(NetworkDisruptionEnv())
+env = FlattenObservation(LiveNetDisEnv())
 # env = FlattenObservation(HeuristicTSPEnv())
 
 state_shape = env.observation_space.shape or env.observation_space.n
