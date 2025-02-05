@@ -164,6 +164,9 @@ class NetworkDisruptionEnv(gym.Env):
                     drone_time += dt / self.DRONE_SPEED_FACTOR
                     drone_start_time = time
                     dwt = False
+                    if time + drone_time > cust['deadline']:
+                        done = True
+                        break
                 else: # Send drone back
                     cust = self.customers[self.drone_route[drone_idx]-1]
                     dt = self._get_travel_time(vx, vy, cust)
@@ -186,7 +189,6 @@ class NetworkDisruptionEnv(gym.Env):
                 vx = cust.get('x')
                 vy = cust.get('y')
         
-
         if time > 0 and dwt:
             if self.max_nodes_reached == len(self.planned_route):
                 if self.min_time > time:
@@ -200,8 +202,11 @@ class NetworkDisruptionEnv(gym.Env):
 
         self._update_state()
         
+        if dwt and (done or self.step_count >= self.step_limit):
+            self.planned_route.append(0)
+
         # if self.draw_all and (done or self.step_count >= self.step_limit):
-        if (self.episodes % 1000 == 0 or (self.episodes > 10000 and self.episodes % 250 == 0)) and (done or self.step_count >= self.step_limit):
+        if (self.episodes % 1000 == 0 or (self.episodes > 10000 and self.episodes % 250 == 0) or self.draw_all) and (done or self.step_count >= self.step_limit):
             self.draw_env(time, remaining)
         
         # if self.step_count >= self.step_limit and not dwt:

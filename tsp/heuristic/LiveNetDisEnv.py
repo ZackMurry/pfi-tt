@@ -157,6 +157,9 @@ class LiveNetDisEnv(gym.Env):
                     drone_time += dt / self.DRONE_SPEED_FACTOR
                     drone_start_time = time
                     dwt = False
+                    if time + drone_time > cust['deadline']:
+                        done = True
+                        break
                 else: # Send drone back
                     cust = self.customers[self.drone_route[drone_idx]-1]
                     dt = self._get_travel_time(vx, vy, cust)
@@ -193,7 +196,10 @@ class LiveNetDisEnv(gym.Env):
                 print(f"Reached new node count! {self.max_nodes_reached}; time: {self.min_time}")
 
         self._update_state()
-        
+
+        if dwt and (done or self.step_count >= self.step_limit):
+            self.planned_route.append(0)
+
         if self.draw_all and (done or self.step_count >= self.step_limit):
           self.draw_env(time, remaining)
         # if (self.episodes % 1000 == 0 or (self.episodes > 10000 and self.episodes % 250 == 0)) and (done or self.step_count >= self.step_limit):

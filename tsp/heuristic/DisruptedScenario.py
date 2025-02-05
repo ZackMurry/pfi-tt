@@ -2,6 +2,7 @@ from random import random
 
 class DisruptedScenario():
   def __init__(self):
+    self.disruptions_enabled = True
     self.random_disruptions = True
     self.requests = [
       {
@@ -157,7 +158,9 @@ class DisruptedScenario():
     ]
     for req in self.requests:
       req['deadline'] *= 1
-      if self.random_disruptions:
+      if not self.disruptions_enabled:
+        req['disrupted'] = 0
+      elif self.random_disruptions:
         if random() < 0.15:
           req['disrupted'] = 1
         else:
