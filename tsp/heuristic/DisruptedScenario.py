@@ -170,6 +170,7 @@ class DisruptedScenario():
   def request(self):
     if len(self.requests) == 0:
       return None
+    # print(self.requests[0])
     return self.requests.pop(0)
 
   def export(self):
@@ -177,3 +178,10 @@ class DisruptedScenario():
       f.write(f"{len(self.requests)}\n")
       for req in self.requests:
         f.write(f"{req['x']} {req['y']} {req['deadline']}\n")
+      
+  def set_disruptions_enabled(self, val):
+    self.disruptions_enabled = val
+    # print('Disruptions enabled?', self.disruptions_enabled)
+    if not val:
+      for req in self.requests:
+        req['disrupted'] = 0

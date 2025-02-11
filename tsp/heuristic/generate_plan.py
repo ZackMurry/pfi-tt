@@ -48,15 +48,15 @@ print('Starting...')
 ZMQ_COORDINATOR = 'COORDINATOR'
 
 env = FlattenObservation(NetworkDisruptionEnv())
-env.draw_all = True
-env.scenario.disruptions_enabled = False
+env.set_draw_all(True)
+env.set_disruptions_enabled(False)
 state_shape = env.observation_space.shape or env.observation_space.n
 print(f'State shape: {state_shape}')
 action_shape = env.action_space.shape or env.action_space.n
 print(f"action shape: {action_shape}")
 
 model = Net(state_shape, action_shape)
-model.load_state_dict(torch.load("good_netdis_policy.pth"))
+model.load_state_dict(torch.load("netdis_policy_2.pth"))
 
 print('Loaded model!')
 
@@ -114,12 +114,12 @@ with torch.no_grad():
         print('Action: ', action - 1, 'Reward: ', reward)
 
 
-collector = ts.data.Collector(policy, env)
+# collector = ts.data.Collector(policy, env)
 
 
-collector.reset()
+# collector.reset()
 
-result = collector.collect(n_episode=10)
+# result = collector.collect(n_episode=10)
 
 print(f"result: {result}")
 # print(f"Average reward: {result['rew']:.2f}, Total steps: {result['n/st']}")

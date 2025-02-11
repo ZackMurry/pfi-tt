@@ -118,21 +118,23 @@ class NetworkDisruptionEnv(gym.Env):
                     
                     if len(self.planned_route) > 1 and self.planned_route[-1] == 0: # Penalize making truck wait for drone to go out and come back
                         print(f'Penalizing drone action on {self.planned_route}')
-                        reward -= 5
+                        reward -= 5 #3
 
 
                     if self.drone_with_truck:
                         # Send drone to next customer
                         self.planned_route.append(0)
+                        # print('Appending to drone route', len(self.customers))
                         self.drone_route.append(len(self.customers))
                         self.drone_with_truck = False
-                        reward += 1 # 1 before, 2 after is best so far
+                        reward += 1 #1 # 1 before, 2 after is best so far
                     else:
                         self.planned_route.append(0)
                         self.drone_with_truck = True
-                        reward += 2 # Give reward once truck collects drone (avoids ending without collecting)
+                        reward += 2 #2 # Give reward once truck collects drone (avoids ending without collecting)
 
                 else:
+                    # print('Adding to planned route', len(self.customers))
                     self.planned_route.insert(action, len(self.customers))
                     reward += 1
                 self.request = None
@@ -202,11 +204,13 @@ class NetworkDisruptionEnv(gym.Env):
 
         self._update_state()
         
-        if dwt and (done or self.step_count >= self.step_limit):
+        if not dwt and (done or self.step_count >= self.step_limit):
             self.planned_route.append(0)
 
         # if self.draw_all and (done or self.step_count >= self.step_limit):
-        if (self.episodes % 1000 == 0 or (self.episodes > 10000 and self.episodes % 250 == 0) or self.draw_all) and (done or self.step_count >= self.step_limit):
+        # print("Draw all?", self.draw_all)
+        # if (self.episodes % 1000 == 0 or (self.episodes > 10000 and self.episodes % 250 == 0) or self.draw_all) and (done or self.step_count >= self.step_limit):
+        if (self.episodes % 1000 == 0 or self.draw_all) and (done or self.step_count >= self.step_limit):
             self.draw_env(time, remaining)
         
         # if self.step_count >= self.step_limit and not dwt:
@@ -423,6 +427,11 @@ class NetworkDisruptionEnv(gym.Env):
             act = self.planned_route[i]
             if act == 0:
                 if dwt:
+                    if drone_idx >= len(self.drone_route):
+                        print('drone idx too high')
+                        print('drone', self.drone_route)
+                        print('planned', self.planned_route)
+                        return
                     cust_id = self.drone_route[drone_idx]-1
                     cust = self.customers[cust_id]
                     mark = '.'
@@ -523,6 +532,12 @@ class NetworkDisruptionEnv(gym.Env):
 
         current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         fig.savefig(f"results/ep-{self.episodes}-n-{self.max_nodes_reached}-t-{round(time, 2)}.png")
+    
+    def set_draw_all(self, val):
+        self.draw_all = val
+    
+    def set_disruptions_enabled(self, val):
+        self.scenario.set_disruptions_enabled(False)
 
 
 
