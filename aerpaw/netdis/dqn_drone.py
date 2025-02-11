@@ -62,7 +62,7 @@ class DQNDrone(ZmqStateMachine):
         self._is_moving = False
         self.network_disrupted = False
 
-        plan_file_name = '/root/n-15-t-88.0.plan'
+        plan_file_name = '/root/netdis.plan'
         print(f"Reading plan from {plan_file_name}...")
         with open(plan_file_name, 'r') as file:
             n = int(file.readline()) # num actions
@@ -72,7 +72,7 @@ class DQNDrone(ZmqStateMachine):
             self.drone_dests = list(map(int, file.readline().split()))
             print(f"drone_dests: {self.drone_dests}")
         
-        scenario_file_name = '/root/export_25.scenario'
+        scenario_file_name = '/root/netdis.scenario'
         print(f"Reading scenario file from {scenario_file_name}...")
         self.customers = []
         with open(scenario_file_name, 'r') as file:
@@ -180,7 +180,7 @@ class DQNDrone(ZmqStateMachine):
         if drone_out:
             await asyncio.sleep(0.5) # Wait for drone to start moving
             while not moving.done(): # Randomly simulate network outage
-                if random.random() < 0.05: # 5% chance
+                if random.random() < -1: #0.05: # 5% chance
                     print('Simulating network outage!')
                     moving.cancel()
                     self.network_disrupted = True
