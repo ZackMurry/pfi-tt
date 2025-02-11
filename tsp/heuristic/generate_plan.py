@@ -56,7 +56,7 @@ action_shape = env.action_space.shape or env.action_space.n
 print(f"action shape: {action_shape}")
 
 model = Net(state_shape, action_shape)
-model.load_state_dict(torch.load("netdis_policy_3.pth"))
+model.load_state_dict(torch.load("netdis_policy_5.pth"))
 # model.load_state_dict(torch.load("policy.pth"))
 
 print('Loaded model!')
@@ -106,6 +106,7 @@ with torch.no_grad():
     max_custs = 0
     for i in range(100):
         state, info = env.reset()
+        env.set_disruptions_enabled(False)
         print(state)
         state_tensor = Batch(obs=[state])
         setattr(state_tensor, 'info', {})
@@ -128,6 +129,9 @@ with torch.no_grad():
             print('Drawing new best!')
             env.draw_env()
             min_time = env.total_time
+        elif False:
+            env.draw_env()
+
         print('Min time: ', min_time, ' for ', max_custs)
 
 

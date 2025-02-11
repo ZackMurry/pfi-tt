@@ -38,6 +38,7 @@ class NetworkDisruptionEnv(gym.Env):
         self.MAX_Y = 20
         self.request = None
         self.generated_map = False
+        self.disruptions_enabled = True
         self.episodes = 0
         self.customers = [] # id, x, y, deadline
         self.proposed_route = []
@@ -106,9 +107,11 @@ class NetworkDisruptionEnv(gym.Env):
             self.rejected.append(self.request)
             self.request = None
             self.nodes_proposed -= 1
+            self.step_count -= 1
             if self.rejections > self.max_rejections:
                 print('Penalty: too many rejections')
                 reward -= 4
+                self.step_count += 1
                 self.rejections = self.max_rejections
         elif self.request != None:
             if len(self.customers) < self.MAX_QUEUE:
@@ -170,10 +173,13 @@ class NetworkDisruptionEnv(gym.Env):
                     # print(f"Getting customer obj for cust {self.drone_route[drone_idx]} at drone_idx {drone_idx}")
                     cust = self.customers[self.drone_route[drone_idx]-1]
                     dt = self._get_travel_time(vx, vy, cust)
-                    drone_time += dt / self.DRONE_SPEED_FACTOR
+                    drone_time = dt / self.DRONE_SPEED_FACTOR
+                    self.remaining[self.drone_route[drone_idx]-1] = cust['deadline'] - (time + drone_time)
+                    # print('Remaining ', self.drone_route[drone_idx]-1, ' is ', cust['deadline'] - (time + drone_time))
                     drone_start_time = time
                     dwt = False
                     if time + drone_time > cust['deadline']:
+                        reward -= 1
                         done = True
                         # break
                 else: # Send drone back
@@ -190,6 +196,7 @@ class NetworkDisruptionEnv(gym.Env):
             dt = self._get_travel_time(vx, vy, cust)
             if time + dt > cust['deadline']:
                 done = True
+                reward -= 1
                 time += dt
                 self.remaining[dest-1] = cust['deadline'] - time
             else:
@@ -228,6 +235,12 @@ class NetworkDisruptionEnv(gym.Env):
         # if self.step_count >= self.step_limit and not dwt:
             # reward -= 5
 
+        if self.step_count >= self.step_limit and not done:
+            reward += 3
+        
+        if self.step_count > 5 and 0 not in self.planned_route:
+            reward -= 3
+
         return self.state, reward, done, (self.step_count >= self.step_limit), {}
     
     def _node_dist(self, a, b):
@@ -263,6 +276,7 @@ class NetworkDisruptionEnv(gym.Env):
         self.rejections = 0
         self.customers = []
         self.scenario = DisruptedScenario()
+        self.scenario.set_disruptions_enabled(self.disruptions_enabled)
         self.request = self.scenario.request()
         self.proposed_route = self._propose_route()
         self.planned_route = []
@@ -467,6 +481,8 @@ class NetworkDisruptionEnv(gym.Env):
                     if cust['disrupted'] == 1:
                         # print('drawing disrupted')
                         mark = 's'
+                    if self.remaining[cust_id] < 0:
+                        mark = 'X'
                     ax.scatter(cust['x'], cust['y'], color='tab:pink', s=200, marker=mark)
                     ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - self.remaining[cust_id])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
                     node_idx += 1
@@ -480,6 +496,8 @@ class NetworkDisruptionEnv(gym.Env):
                 if cust['disrupted'] == 1:
                     # print('drawing disrupted')
                     mark = 's'
+                if self.remaining[act-1] < 0:
+                    mark = 'X'
                 ax.scatter(cust['x'], cust['y'], color='b', s=300, marker=mark)
                 ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - self.remaining[act-1])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
                 node_idx += 1
@@ -566,7 +584,8 @@ class NetworkDisruptionEnv(gym.Env):
         self.draw_all = val
     
     def set_disruptions_enabled(self, val):
-        self.scenario.set_disruptions_enabled(False)
+        self.disruptions_enabled = val
+        self.scenario.set_disruptions_enabled(val)
 
 
 
