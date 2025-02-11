@@ -24,7 +24,7 @@ class DQNRover(ZmqStateMachine):
         self._next_step = False
         self._dwt = True
 
-        plan_file_name = '/root/n-15-t-88.0.plan'
+        plan_file_name = '/root/netdis.plan'
         print(f"Reading plan from {plan_file_name}...")
         with open(plan_file_name, 'r') as file:
             n = int(file.readline()) # num actions
@@ -34,7 +34,7 @@ class DQNRover(ZmqStateMachine):
             self.drone_dests = list(map(int, file.readline().split()))
             print(f"drone_dests: {self.drone_dests}")
         
-        scenario_file_name = '/root/export_25.scenario'
+        scenario_file_name = '/root/netdis.scenario'
         print(f"Reading scenario file from {scenario_file_name}...")
         self.customers = []
         with open(scenario_file_name, 'r') as file:
