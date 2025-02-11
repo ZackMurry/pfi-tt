@@ -48,7 +48,7 @@ print('Starting...')
 ZMQ_COORDINATOR = 'COORDINATOR'
 
 env = FlattenObservation(NetworkDisruptionEnv())
-env.set_draw_all(True)
+# env.set_draw_all(True)
 env.set_disruptions_enabled(False)
 state_shape = env.observation_space.shape or env.observation_space.n
 print(f'State shape: {state_shape}')
@@ -56,7 +56,8 @@ action_shape = env.action_space.shape or env.action_space.n
 print(f"action shape: {action_shape}")
 
 model = Net(state_shape, action_shape)
-model.load_state_dict(torch.load("netdis_policy_2.pth"))
+model.load_state_dict(torch.load("netdis_policy_3.pth"))
+# model.load_state_dict(torch.load("policy.pth"))
 
 print('Loaded model!')
 
@@ -93,25 +94,41 @@ policy = ts.policy.DQNPolicy(
 policy.eval()
 #policy = EvalPolicy(model, env.action_space)
 
-state, info = env.reset()
-print(state)
-state_tensor = Batch(obs=[state])
-setattr(state_tensor, 'info', {})
+# state, info = env.reset()
+# print(state)
+# state_tensor = Batch(obs=[state])
+# setattr(state_tensor, 'info', {})
 
 # todo: repeat n times and pick the fastest
 
 with torch.no_grad():
-    is_done = False
-    while not is_done:
-        result = policy(state_tensor)
-        action = result.act[0]
-        print(env.planned_route)
-        next_state, reward, done, truncated, info = env.step(action)
-        is_done = done
-        print('Done?', is_done)
-        state_tensor = Batch(obs=[next_state])
+    min_time = 999
+    max_custs = 0
+    for i in range(100):
+        state, info = env.reset()
+        print(state)
+        state_tensor = Batch(obs=[state])
         setattr(state_tensor, 'info', {})
-        print('Action: ', action - 1, 'Reward: ', reward)
+        is_done = False
+        num_steps = 0
+        while not is_done:
+            # print(state_tensor)
+            result = policy(state_tensor)
+            action = result.act[0]
+            # print(env.planned_route)
+            next_state, reward, done, truncated, info = env.step(action)
+            is_done = done
+            # print('Done?', is_done)
+            state_tensor = Batch(obs=[next_state])
+            setattr(state_tensor, 'info', {})
+            # print('Action: ', action - 1, 'Reward: ', reward)
+        print('Total time: ', env.total_time, '; num steps: ', num_steps)
+        max_custs = max(max_custs, len(env.customers))
+        if len(env.planned_route) == max_custs and env.total_time < min_time:
+            print('Drawing new best!')
+            env.draw_env()
+            min_time = env.total_time
+        print('Min time: ', min_time, ' for ', max_custs)
 
 
 # collector = ts.data.Collector(policy, env)

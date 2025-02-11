@@ -53,7 +53,8 @@ action_shape = env.action_space.shape or env.action_space.n
 print(f"action shape: {action_shape}")
 
 model = Net(state_shape, action_shape)
-model.load_state_dict(torch.load("good_netdis_policy.pth"))
+# model.load_state_dict(torch.load("good_netdis_policy.pth"))
+model.load_state_dict(torch.load("netdis_policy_2.pth"))
 
 print('Loaded model!')
 
