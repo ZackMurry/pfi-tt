@@ -12,8 +12,9 @@ from DisruptedScenario import DisruptedScenario
 from math import pow, sqrt
 
 # todo: add requirement for truck and drone to end at depot
-# todo: fix bug with some drone dests not showing routes
 # todo: add dynamic by fixing some part of the route
+
+# todo: when we need multi-drone, we can assign -1 as sending/recouping drone number 2
 class NetworkDisruptionEnv(gym.Env):
     def __init__(self, *args, **kwargs):
         self.min_time = 999999

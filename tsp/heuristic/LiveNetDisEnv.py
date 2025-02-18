@@ -25,18 +25,13 @@ class LiveNetDisEnv(gym.Env):
         self.MAX_T = 151
         self.MAX_NODES = 25
         self.MAX_QUEUE = 10
-        self.max_nodes_reached = self.MAX_QUEUE
-        self.nodes_proposed = 0
-        self.use_dataset = False
         self.step_count = 0
         self.visited = []
         self.rejected = []
         self.spec = SimpleNamespace(reward_threshold=100)
-        self.render_ready = False
         self.MAX_X = 20
         self.MAX_Y = 20
         self.request = None
-        self.generated_map = False
         self.episodes = 0
         self.customers = [] # id, x, y, deadline
         self.proposed_route = []
@@ -44,10 +39,11 @@ class LiveNetDisEnv(gym.Env):
         self.action_list = []
         self.drone_with_truck = True
         self.drone_route = []
+        self.remaining = []
 
-        self.step_limit = self.MAX_QUEUE + 2
+        self.max_rejections = 4
+        self.step_limit = self.MAX_QUEUE + self.max_rejections
         self.rejections = 0
-        self.max_rejections = self.MAX_QUEUE//2
         self.draw_all = True
 
 
@@ -71,6 +67,7 @@ class LiveNetDisEnv(gym.Env):
                 "deadline": spaces.MultiDiscrete([self.MAX_T]*self.MAX_QUEUE),
                 # "disrupted": spaces.MultiDiscrete([2]*self.MAX_QUEUE)
             }),
+            "rejections": spaces.Discrete(self.max_rejections + 1)
         })
 
         # reject + drone flag + truck path
@@ -96,6 +93,12 @@ class LiveNetDisEnv(gym.Env):
             self.rejected.append(self.request)
             self.request = None
             self.nodes_proposed -= 1
+            self.step_count -= 1
+            if self.rejections > self.max_rejections:
+                print('Penalty: too many rejections')
+                reward -= 4
+                self.step_count += 1
+                self.rejections = self.max_rejections
         elif self.request != None:
             if len(self.customers) < self.MAX_QUEUE:
                 self.customers.append(self.request)
@@ -111,21 +114,23 @@ class LiveNetDisEnv(gym.Env):
                     
                     if len(self.planned_route) > 1 and self.planned_route[-1] == 0: # Penalize making truck wait for drone to go out and come back
                         print(f'Penalizing drone action on {self.planned_route}')
-                        reward -= 5
+                        reward -= 5 #3
 
 
                     if self.drone_with_truck:
                         # Send drone to next customer
                         self.planned_route.append(0)
+                        # print('Appending to drone route', len(self.customers))
                         self.drone_route.append(len(self.customers))
                         self.drone_with_truck = False
-                        reward += 1 # 1 before, 2 after is best so far
+                        reward += 1 #1 # 1 before, 2 after is best so far
                     else:
                         self.planned_route.append(0)
                         self.drone_with_truck = True
-                        reward += 2 # Give reward once truck collects drone (avoids ending without collecting)
+                        reward += 2 #2 # Give reward once truck collects drone (avoids ending without collecting)
 
                 else:
+                    # print('Adding to planned route', len(self.customers))
                     self.planned_route.insert(action, len(self.customers))
                     reward += 1
                 self.request = None
@@ -142,7 +147,7 @@ class LiveNetDisEnv(gym.Env):
         time = self.t
         vx = self.x
         vy = self.y
-        remaining = [-1] * len(self.customers)
+        self.remaining = [-1] * len(self.customers)
         dwt = True # Drone with truck?
         drone_idx = 0
         drone_time = 0
@@ -154,12 +159,15 @@ class LiveNetDisEnv(gym.Env):
                     # print(f"Getting customer obj for cust {self.drone_route[drone_idx]} at drone_idx {drone_idx}")
                     cust = self.customers[self.drone_route[drone_idx]-1]
                     dt = self._get_travel_time(vx, vy, cust)
-                    drone_time += dt / self.DRONE_SPEED_FACTOR
+                    drone_time = dt / self.DRONE_SPEED_FACTOR
+                    self.remaining[self.drone_route[drone_idx]-1] = cust['deadline'] - (time + drone_time)
+                    # print('Remaining ', self.drone_route[drone_idx]-1, ' is ', cust['deadline'] - (time + drone_time))
                     drone_start_time = time
                     dwt = False
                     if time + drone_time > cust['deadline']:
+                        reward -= 1
                         done = True
-                        break
+                        # break
                 else: # Send drone back
                     cust = self.customers[self.drone_route[drone_idx]-1]
                     dt = self._get_travel_time(vx, vy, cust)
@@ -174,41 +182,43 @@ class LiveNetDisEnv(gym.Env):
             dt = self._get_travel_time(vx, vy, cust)
             if time + dt > cust['deadline']:
                 done = True
+                reward -= 1
                 time += dt
-                remaining[dest-1] = cust['deadline'] - time
+                self.remaining[dest-1] = cust['deadline'] - time
             else:
                 time += dt
-                remaining[dest-1] = cust['deadline'] - time
+                self.remaining[dest-1] = cust['deadline'] - time
                 vx = cust.get('x')
                 vy = cust.get('y')
         
-
-        if time > 0 and dwt:
-            # if self.max_nodes_reached == len(self.planned_route):
-                # if self.min_time > time:
-                #     self.min_time = time
-                #     print(f"Min time for {self.max_nodes_reached}: {self.min_time}")
-                    # self.draw_env(time, remaining)
-            # elif
-            if self.max_nodes_reached < len(self.planned_route):
-                # self.min_time = time
-                self.max_nodes_reached = len(self.planned_route)
-                print(f"Reached new node count! {self.max_nodes_reached}; time: {self.min_time}")
-
         self._update_state()
 
-        if dwt and (done or self.step_count >= self.step_limit):
-            self.planned_route.append(0)
+        if (done or self.step_count >= self.step_limit):
+            num_drone_steps = 0
+            for i in range(len(self.planned_route)):
+                if self.planned_route[i] == 0:
+                    num_drone_steps += 1
+            if num_drone_steps % 2 == 1:
+                self.planned_route.append(0)
 
+        # if self.draw_all and (done or self.step_count >= self.step_limit):
+        # print("Draw all?", self.draw_all)
+        # if (self.episodes % 1000 == 0 or (self.episodes > 10000 and self.episodes % 250 == 0) or self.draw_all) and (done or self.step_count >= self.step_limit):
+        self.total_time = time
         if self.draw_all and (done or self.step_count >= self.step_limit):
-          self.draw_env(time, remaining)
-        # if (self.episodes % 1000 == 0 or (self.episodes > 10000 and self.episodes % 250 == 0)) and (done or self.step_count >= self.step_limit):
+            self.draw_env()
         
         # if self.step_count >= self.step_limit and not dwt:
             # reward -= 5
 
+        if self.step_count >= self.step_limit and not done:
+            reward += 3
+        
+        if self.step_count > 5 and 0 not in self.planned_route:
+            reward -= 3
+
         return self.state, reward, done, (self.step_count >= self.step_limit), {}
-    
+
     def _node_dist(self, a, b):
         return np.sqrt(self._node_sqdist(a, b))
 
@@ -234,6 +244,7 @@ class LiveNetDisEnv(gym.Env):
         self.y = 0
         self.visited = []
         self.rejected = []
+        self.remaining = []
         self.nodes_proposed = 0
         self.proposed_time = 0
         self.step_count = 0
@@ -303,6 +314,7 @@ class LiveNetDisEnv(gym.Env):
             "planned_route": np.array(planned),
             "drone_route": np.array(drone_r),
             "route_length": len(self.planned_route),
+            "rejections": self.rejections
         }
         # print(f'state: {state}')
         self.state = state
@@ -373,8 +385,7 @@ class LiveNetDisEnv(gym.Env):
         return np.sqrt(np.power(N0[0] - N1[0], 2) + np.power(N0[1] - N1[1], 2))
             
     def step(self, action):
-        if self.render_ready:
-            print(f"moving to {action}")
+        print(f"moving to {action}")
         return self._STEP(action)
 
     def reset(self, seed=None, options=None):
@@ -389,11 +400,11 @@ class LiveNetDisEnv(gym.Env):
     def seed(self, seed):
         np.random.seed(seed)
 
-    def draw_env(self, time, remaining):
+    def draw_env(self):
         fig, ax = plt.subplots(figsize=(12,8))
         # todo: export to file in standardized data format for AERPAW script
 
-        with open(f"results/ep-{self.episodes}-n-{self.max_nodes_reached}-t-{round(time, 2)}.plan", 'w') as f:
+        with open(f"results/ep-{self.episodes}-n-{len(self.customers)}-t-{round(self.total_time, 2)}.plan", 'w') as f:
             f.write(f"{len(self.planned_route)}\n")
             for act in self.planned_route:
                 f.write(f"{act} ")
@@ -418,14 +429,21 @@ class LiveNetDisEnv(gym.Env):
             act = self.planned_route[i]
             if act == 0:
                 if dwt:
+                    if drone_idx >= len(self.drone_route):
+                        print('drone idx too high')
+                        print('drone', self.drone_route)
+                        print('planned', self.planned_route)
+                        return
                     cust_id = self.drone_route[drone_idx]-1
                     cust = self.customers[cust_id]
                     mark = '.'
                     if cust['disrupted'] == 1:
                         # print('drawing disrupted')
                         mark = 's'
+                    if self.remaining[cust_id] < 0:
+                        mark = 'X'
                     ax.scatter(cust['x'], cust['y'], color='tab:pink', s=200, marker=mark)
-                    ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - remaining[cust_id])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
+                    ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - self.remaining[cust_id])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
                     node_idx += 1
                     drawn.append(cust_id)
                 else:
@@ -437,8 +455,10 @@ class LiveNetDisEnv(gym.Env):
                 if cust['disrupted'] == 1:
                     # print('drawing disrupted')
                     mark = 's'
+                if self.remaining[act-1] < 0:
+                    mark = 'X'
                 ax.scatter(cust['x'], cust['y'], color='b', s=300, marker=mark)
-                ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - remaining[act-1])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
+                ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - self.remaining[act-1])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
                 node_idx += 1
                 drawn.append(act-1)
 
@@ -459,7 +479,7 @@ class LiveNetDisEnv(gym.Env):
         for i in range(len(self.visited) - 1):
             ax.plot([self.customers[self.planned_route[i]-1]['x'], self.customers[self.planned_route[i+1]-1]['x']],
                 [self.customers[self.planned_route[i]-1]['y'], self.customers[self.planned_route[i+1]-1]['y']], col, linestyle='solid')
-        if time < 0:
+        if self.total_time < 0:
             col = 'yo'
         if len(self.visited) > 0:
             ax.plot([0, self.visited[0]['x']],
@@ -513,13 +533,8 @@ class LiveNetDisEnv(gym.Env):
                 vx = cust.get('x')
                 vy = cust.get('y')
 
-
-
-
         current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        fig.savefig(f"results/ep-{self.episodes}-n-{self.max_nodes_reached}-t-{round(time, 2)}.png")
-
-
+        fig.savefig(f"results/ep-{self.episodes}-n-{len(self.customers)}-t-{round(self.total_time, 2)}.png")
 
 def save_log(data, name):
     if len(data) == 0:

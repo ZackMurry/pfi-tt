@@ -54,7 +54,7 @@ print(f"action shape: {action_shape}")
 
 model = Net(state_shape, action_shape)
 # model.load_state_dict(torch.load("good_netdis_policy.pth"))
-model.load_state_dict(torch.load("netdis_policy_2.pth"))
+model.load_state_dict(torch.load("netdis_policy_5.pth"))
 
 print('Loaded model!')
 
@@ -98,7 +98,9 @@ setattr(state_tensor, 'info', {})
 
 with torch.no_grad():
     is_done = False
+    steps = 0
     while not is_done:
+        steps += 1
         result = policy(state_tensor)
         action = result.act[0]
         print(env.planned_route)
@@ -108,15 +110,16 @@ with torch.no_grad():
         state_tensor = Batch(obs=[next_state])
         setattr(state_tensor, 'info', {})
         print('Action: ', action - 1, 'Reward: ', reward)
+    print('Num steps: ', steps)
 
 
-collector = ts.data.Collector(policy, env)
+# collector = ts.data.Collector(policy, env)
 
 
-collector.reset()
+# collector.reset()
 
-result = collector.collect(n_episode=10)
+# result = collector.collect(n_episode=10)
 
-print(f"result: {result}")
+# print(f"result: {result}")
 # print(f"Average reward: {result['rew']:.2f}, Total steps: {result['n/st']}")
 
