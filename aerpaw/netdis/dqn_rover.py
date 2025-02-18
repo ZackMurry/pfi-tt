@@ -6,33 +6,17 @@ from sys import exit
 
 print('Starting...')
 
-# todo: convert to a drone and do everything 60 ft in the air
-# todo: aerpawlib zmq for coordinating actions (i.e., wait to meet truck before moving on)
-
 ZMQ_COORDINATOR = 'COORDINATOR'
 
 class DQNRover(ZmqStateMachine):
 
     def __init__(self):
-        print("Initializing drone...")
+        print("Initializing rover...")
         self.start_pos = None
         self.takeoff_pos = None
-        self.actions = []
-        self.action_idx = 0
-        self.drone_dests = []
         self._takeoff_ordered = False
         self._next_step = False
         self._dwt = True
-
-        plan_file_name = '/root/netdis.plan'
-        print(f"Reading plan from {plan_file_name}...")
-        with open(plan_file_name, 'r') as file:
-            n = int(file.readline()) # num actions
-            self.actions = list(map(int, file.readline().split()))
-            print(f"actions: {self.actions}")
-            m = int(file.readline()) # num drone dests
-            self.drone_dests = list(map(int, file.readline().split()))
-            print(f"drone_dests: {self.drone_dests}")
         
         scenario_file_name = '/root/netdis.scenario'
         print(f"Reading scenario file from {scenario_file_name}...")
@@ -105,25 +89,17 @@ class DQNRover(ZmqStateMachine):
     @state(name="follow_route")
     async def follow_route(self, rover: Drone):
         self._next_step = False
-        print(f"Action idx: {self.action_idx}")
-        if self.action_idx >= len(self.actions):
-            return "park"
 
-        # await self.transition_runner('drone', 'test')
-        action = self.actions[self.action_idx]
-        if action == 0: # Drone operation
-            self.action_idx += 1
-            self._dwt = not self._dwt
-            if self._dwt:
-                print('Waiting for drone!')
-                await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_wait_for_drone')
-                return "wait_for_step"
-            else:
-                # Step is done for rover
-                print('Skipping drone step (action is 0)')
-                # await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_finished_step')
-                return "follow_route"
-        cust = self.customers[action - 1]
+        next_waypoint = await self.query_field(ZMQ_COORDINATOR, "drone_next")
+
+        if next_waypoint == -1:
+            return "park"
+        
+        if next_waypoint == 0:
+            await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_finished_step')
+            return "wait_for_step"
+
+        cust = self.customers[next_waypoint - 1]
         target_x = cust['x'] * 10
         target_y = cust['y'] * 10
         print(f"Next target: {target_x}, {target_y}")
@@ -138,6 +114,7 @@ class DQNRover(ZmqStateMachine):
     @state(name="park")
     async def park(self, rover: Drone):
         print('Parking...')
+        await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_parked')
         await asyncio.ensure_future(rover.goto_coordinates(self.takeoff_pos))
         await rover.land()
         print('Parked!')
