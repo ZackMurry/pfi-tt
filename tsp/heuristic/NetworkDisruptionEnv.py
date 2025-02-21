@@ -119,10 +119,6 @@ class NetworkDisruptionEnv(gym.Env):
                 self.customers.append(self.request)
                 if action == 0: # Send drone to capture request!
                     # print('drone')
-                    if self.request['disrupted']:
-                        # print(self.request)
-                        reward -= 10
-                        done = True
                         # done = True`
                     # else:
                     #     reward += 1
@@ -134,6 +130,10 @@ class NetworkDisruptionEnv(gym.Env):
 
                     if self.drone_with_truck:
                         # Send drone to next customer
+                        if self.request['disrupted']:
+                            # print(self.request)
+                            reward -= 10
+                            done = True
                         self.planned_route.append(0)
                         # print('Appending to drone route', len(self.customers))
                         self.drone_route.append(len(self.customers))
