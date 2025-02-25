@@ -72,6 +72,8 @@ ZMQ_COORDINATOR = 'COORDINATOR'
 ZMQ_ROVER = "ROVER"
 ZMQ_DRONE = "DRONE"
 
+# todo: we need to minimize deviation from original plan
+
 class GroundCoordinatorRunner(ZmqStateMachine):
   
   def __init__(self):
@@ -126,9 +128,9 @@ class GroundCoordinatorRunner(ZmqStateMachine):
 
     self.env = FlattenObservation(LiveNetDisEnv())
     self.env.draw_all = True
-    state_shape = env.observation_space.shape or env.observation_space.n
+    state_shape = self.env.observation_space.shape or self.env.observation_space.n
     print(f'State shape: {state_shape}')
-    action_shape = env.action_space.shape or env.action_space.n
+    action_shape = self.env.action_space.shape or self.env.action_space.n
     print(f"action shape: {action_shape}")
 
     self.model = Net(state_shape, action_shape)
@@ -150,21 +152,22 @@ class GroundCoordinatorRunner(ZmqStateMachine):
   async def await_taken_off(self, _):
     # wait for both drones to finish taking off
     # this will be done by waiting for two flags to be set; each flag is set by transitioning to a special state
-    if not (self._rover_taken_off and self._drone_taken_off):
+    if not (self.rover_taken_off and self.drone_taken_off):
       return "await_taken_off"
-    self._rover_finished_step = True
-    self._drone_finished_step = True
+    print('Both taken off!')
+    self.rover_finished_step = True
+    self.drone_finished_step = True
     return "wait_for_step"
 
   @state(name="callback_rover_taken_off")
   async def callback_rover_taken_off(self, _):
-    self._rover_taken_off = True
+    self.rover_taken_off = True
     print('Rover taken off!')
     return "await_taken_off"
 
   @state(name="callback_drone_taken_off")
   async def callback_drone_taken_off(self, _):
-    self._drone_taken_off = True
+    self.drone_taken_off = True
     print('Drone taken off!')
     return "await_taken_off"
   
@@ -337,6 +340,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     
     if self.rover_idx == self.drone_idx and self.rover_finished_step and self.drone_finished_step:
       # Simple case: drone and rover finished moving together
+      print('drone and rover finished moving together')
       return "next_waypoint"
     
 
@@ -345,96 +349,52 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     # Case: drone is out, rover finished step and is waiting for drone
     if not dwt and self.actions[self.rover_idx] == 0 and self.rover_finished_step:
       # Do nothing? Waiting for next update
-      pass
+      print('Drone is out, rover finished step and is waiting for drone')
 
     # Case: drone is out, rover finished step
     if not dwt and self.actions[self.rover_idx] != 0 and self.rover_finished_step:
-      return "next_waypoint_rover"
+      print('Drone is out, rover finished step')
+      return 'next_waypoint_rover'
 
     # Case: drone is out and finished delivery
     d_dwt = self.drone_with_truck(self.drone_idx)
     if not d_dwt and self.drone_finished_step: # todo
-      pass
+      print('drone is out and finished delivery')
 
-    if self._drone_waiting and self._rover_finished_step:
+    if self.drone_waiting and self.rover_finished_step:
       if self.rover_idx == self.drone_idx:
+        print('drone waiting, rover finished, same idx')
+      else:
+        print('drone waiting, rover finished, different idx')
 
     
 
-    if self._drone_waiting and self._rover_waiting:
-      print('Both waited for each other!')
-      self._drone_waiting = False
-      self._rover_waiting = False
-      self.action_idx += 1
-      return "next_waypoint"
-    if self._drone_waiting and self._rover_finished_step:
-      
-      return "next_waypoint_rover"
+    return "wait_for_step"
     
       
-
   
-  @state(name="wait_for_step")
-  async def wait_for_step(self, _):
-    print('Waiting for step...')
-    ping_req = asyncio.ensure_future(self.query_field(ZMQ_DRONE, 'ping'))
-    if self._rover_parked and self._drone_landed:
-      print('Drone landed and rover parked!')
-      return
-    if self._rover_finished_step and self._drone_finished_step:
-      print('Both finished step!')
-      self._rover_waiting = False
-      self._drone_waiting = False
-      return "next_waypoint"
-    if self._drone_waiting and self._rover_waiting:
-      print('Both waited for each other!')
-      self._drone_waiting = False
-      self._rover_waiting = False
-      return "next_waypoint"
-    # if self._rover_finished_step and not self._dwt and not self._rover_waiting and not self._drone_waiting:
-    #   print('Rover finished step, drone is out, and rover is not waiting')
-    #   return "next_waypoint_rover"
-    if self._drone_waiting and self._rover_finished_step:
-      return "next_waypoint_rover"
-    if not self._dwt and self._rover_finished_step and not self._rover_waiting:
-      return "next_waypoint_rover"
-    await asyncio.sleep(0.5)
-    print("is ping req done: " + str(ping_req.done()))
-    if not ping_req.done():
-      print('Network outage!')
-      ping_req.cancel()
-      return "handle_network_outage"
-    return "wait_for_step"
-  
-  @state(name="handle_network_outage")
-  async def handle_network_outage(self, _):
-    print('Sending STEP to rover while drone is waiting')
-    self._rover_finished_step = False
-    await self.transition_runner(ZMQ_ROVER, 'step')
-    return "wait_for_step"
   @state(name="callback_rover_finished_step")
   async def callback_rover_finished_step(self, _):
     print("callback_rover_finished_step")
-    self._rover_finished_step = True
+    self.rover_finished_step = True
     return "wait_for_step"
 
   @state(name="callback_drone_finished_step")
   async def callback_drone_finished_step(self, _):
     print("callback_drone_finished_step")
-    self._drone_finished_step = True
-    self._dwt = True
+    self.drone_finished_step = True
     return "wait_for_step"
 
   @state(name="callback_drone_landed")
   async def callback_drone_landed(self, _):
     print("Drone has landed!")
-    self._drone_landed = True
+    self.drone_landed = True
     return "wait_for_step"
 
   @state(name="callback_rover_parked")
   async def callback_rover_parked(self, _):
     print("Rover has parked!")
-    self._rover_parked = True
+    self.rover_parked = True
     return "wait_for_step"
 
 
