@@ -44,7 +44,6 @@ class LiveNetDisEnv(gym.Env):
         self.max_rejections = 4
         self.step_limit = self.MAX_QUEUE + self.max_rejections
         self.rejections = 0
-        self.draw_all = False
 
 
         # drone flag + truck path + empty
@@ -205,8 +204,6 @@ class LiveNetDisEnv(gym.Env):
         # print("Draw all?", self.draw_all)
         # if (self.episodes % 1000 == 0 or (self.episodes > 10000 and self.episodes % 250 == 0) or self.draw_all) and (done or self.step_count >= self.step_limit):
         self.total_time = time
-        if self.draw_all and (done or self.step_count >= self.step_limit):
-            self.draw_env()
         
         # if self.step_count >= self.step_limit and not dwt:
             # reward -= 5
@@ -250,7 +247,7 @@ class LiveNetDisEnv(gym.Env):
         self.step_count = 0
         self.rejections = 0
         self.customers = []
-        self.scenario = LiveScenario()
+        self.scenario.reset()
         self.request = self.scenario.request()
         self.proposed_route = self._propose_route()
         self.planned_route = []
@@ -375,12 +372,6 @@ class LiveNetDisEnv(gym.Env):
         # print(f"matrix: {matrix}")
         self.dist_matrix = matrix
 
-    def _generate_coordinates(self):
-        n = np.linspace(0, 2*np.pi, self.N+1)
-        x = np.cos(n)
-        y = np.sin(n)
-        return np.vstack([x, y])
-
     def _get_node_distance(self, N0, N1):
         return np.sqrt(np.power(N0[0] - N1[0], 2) + np.power(N0[1] - N1[1], 2))
             
@@ -399,142 +390,9 @@ class LiveNetDisEnv(gym.Env):
     
     def seed(self, seed):
         np.random.seed(seed)
-
-    def draw_env(self):
-        fig, ax = plt.subplots(figsize=(12,8))
-        # todo: export to file in standardized data format for AERPAW script
-
-        with open(f"results/ep-{self.episodes}-n-{len(self.customers)}-t-{round(self.total_time, 2)}.plan", 'w') as f:
-            f.write(f"{len(self.planned_route)}\n")
-            for act in self.planned_route:
-                f.write(f"{act} ")
-            f.write('\n')
-            f.write(f"{len(self.drone_route)}\n")
-            for d_act in self.drone_route:
-                f.write(f"{d_act} ")
-            f.write('\n')
-
-
-        ax.set_xlim([0,20])
-        ax.set_ylim([0,20])
-        ax.set_xticks([0,2,4,6,8,10,12,14,16,18,20])
-        ax.set_yticks([0,2,4,6,8,10,12,14,16,18,20])
-        ax.set_title(f'{self.action_list}')
-        # route = self.visited + self.planned_route
-        dwt = True
-        drone_idx = 0
-        node_idx = 1
-        drawn = []
-        for i in range(len(self.planned_route)):
-            act = self.planned_route[i]
-            if act == 0:
-                if dwt:
-                    if drone_idx >= len(self.drone_route):
-                        print('drone idx too high')
-                        print('drone', self.drone_route)
-                        print('planned', self.planned_route)
-                        return
-                    cust_id = self.drone_route[drone_idx]-1
-                    cust = self.customers[cust_id]
-                    mark = '.'
-                    if cust['disrupted'] == 1:
-                        # print('drawing disrupted')
-                        mark = 's'
-                    if self.remaining[cust_id] < 0:
-                        mark = 'X'
-                    ax.scatter(cust['x'], cust['y'], color='tab:pink', s=200, marker=mark)
-                    ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - self.remaining[cust_id])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
-                    node_idx += 1
-                    drawn.append(cust_id)
-                else:
-                    drone_idx += 1 
-                dwt = not dwt
-            elif (act-1) not in drawn:
-                cust = self.customers[act-1]
-                mark = '.'
-                if cust['disrupted'] == 1:
-                    # print('drawing disrupted')
-                    mark = 's'
-                if self.remaining[act-1] < 0:
-                    mark = 'X'
-                ax.scatter(cust['x'], cust['y'], color='b', s=300, marker=mark)
-                ax.annotate(f"${node_idx},d={cust['deadline']},t={round(cust['deadline'] - self.remaining[act-1])}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
-                node_idx += 1
-                drawn.append(act-1)
-
-
-
-        # for i in range(len(self.customers)):
-        #     cust = self.customers[i]
-        #     col = 'g' if i == self.planned_route[-1]-1 else 'b'
-        #     ax.scatter(cust['x'], cust['y'], color=col, s=300)
-        #     ax.annotate(f"$N_{i},d={cust['deadline']},t={cust['deadline'] - remaining[i]}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
-        for rej in self.rejected:
-            ax.scatter(rej['x'], rej['y'], color='red', s=100)
-        # for node in self.visited:
-        #     col = 'black'
-        #     ax.scatter(node['x'], node['y'], color=col, s=300)
-        #     ax.annotate(f"$N_{i},d={node['deadline']}$", xy=(cust['x']+0.4, cust['y']+0.05), zorder=2)
-        col = 'bo'
-        for i in range(len(self.visited) - 1):
-            ax.plot([self.customers[self.planned_route[i]-1]['x'], self.customers[self.planned_route[i+1]-1]['x']],
-                [self.customers[self.planned_route[i]-1]['y'], self.customers[self.planned_route[i+1]-1]['y']], col, linestyle='solid')
-        if self.total_time < 0:
-            col = 'yo'
-        if len(self.visited) > 0:
-            ax.plot([0, self.visited[0]['x']],
-                [0, self.visited[0]['y']], col, linestyle='solid')
-            for i in range(len(self.visited)-1):
-                ax.plot([self.visited[i]['x'], self.visited[i+1]['y']],
-                    [self.visited[i+1]['x'], self.visited[i+1]['y']])
-        
-        # for dd in self.drone_route:
-        #     cust = self.customers[dd-1]
-        #     ax.scatter(cust['x'], cust['y'], color='tab:pink', s=200)
-
-
-        truck_route = []
-        for dest in self.planned_route:
-            if dest != 0:
-                truck_route.append(dest)
-        if len(truck_route) > 0:
-            ax.plot([self.x, self.customers[truck_route[0]-1]['x']],
-                [self.y, self.customers[truck_route[0]-1]['y']], col, linestyle='solid')
-        for i in range(len(truck_route) - 1):
-            ax.plot([self.customers[truck_route[i]-1]['x'], self.customers[truck_route[i+1]-1]['x']],
-                [self.customers[truck_route[i]-1]['y'], self.customers[truck_route[i+1]-1]['y']], col, linestyle='solid')
-        if len(self.proposed_route) > 0 and self.SHOW_HEURISTIC:
-            ax.plot([self.x, self.customers[self.proposed_route[0]-1]['x']],
-                [self.y, self.customers[self.proposed_route[0]-1]['y']], 'ro', linestyle='--')
-            for i in range(len(self.proposed_route) - 1):
-                ax.plot([self.customers[self.proposed_route[i]-1]['x'], self.customers[self.proposed_route[i+1]-1]['x']],
-                    [self.customers[self.proposed_route[i]-1]['y'], self.customers[self.proposed_route[i+1]-1]['y']], 'ro', linestyle='--')
-        
-        drone_idx = 0
-        dwt = True # drone with truck
-        vx = self.x # = 0
-        vy = self.y # = 0
-        for dest in self.planned_route:
-            if dest == 0: # is drone
-                if dwt:
-                    ax.scatter(vx, vy, color='c', s=300)
-                else:
-                    ax.scatter(vx, vy, color='tab:brown', s=300)
-                ax.plot([vx, self.customers[self.drone_route[drone_idx]-1]['x']],
-                    [vy, self.customers[self.drone_route[drone_idx]-1]['y']],
-                    'mo', linestyle='dashed')
-                
-                if not dwt:
-                    drone_idx += 1
-
-                dwt = not dwt
-            else:
-                cust = self.customers[dest-1]
-                vx = cust.get('x')
-                vy = cust.get('y')
-
-        current_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        fig.savefig(f"results/ep-{self.episodes}-n-{len(self.customers)}-t-{round(self.total_time, 2)}.png")
+    
+    def set_served_custs(self, the_list):
+        self.scenario.set_served_custs(the_list)
 
 def save_log(data, name):
     if len(data) == 0:

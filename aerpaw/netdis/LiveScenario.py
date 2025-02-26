@@ -1,8 +1,10 @@
 from random import random
 
-class DisruptedScenario():
+class LiveScenario():
   def __init__(self):
     self.disruptions_enabled = True
+    self.order_idx = 0
+    self.order = []
     # self.random_disruptions = True
     self.requests = [
       {
@@ -159,17 +161,19 @@ class DisruptedScenario():
 
 
   def request(self):
-    if len(self.requests) == 0:
+    if self.order_idx >= len(self.order):
       return None
-    # print(self.requests[0])
-    return self.requests.pop(0)
+    req = self.requests[self.order[self.order_idx]]
+    self.order_idx += 1
+    return req
 
-  def filter_requests(self, arr):
-    valid_reqs = []
-    for i in range(len(self.requests)):
-      if (i+1) in arr:
-        valid_reqs.append(self.requests[i])
-    print('valid reqs')
-    print(valid_reqs)
-    self.requests = valid_reqs
+  def reset(self):
+    self.order_idx = 0
+
+  def set_served_custs(self, the_list):
+    self.order = the_list
   
+  # When we give a preset planned route, we need to skip to idx to not re-give the preset customers
+  def set_order_index(self, idx):
+    self.order_idx = idx
+

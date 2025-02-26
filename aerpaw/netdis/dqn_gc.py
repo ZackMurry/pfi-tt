@@ -74,7 +74,6 @@ ZMQ_DRONE = "DRONE"
 
 # todo: we need to minimize deviation from original plan
 
-# todo: current bug: sends drone out for first waypoint but rover doesn't do anything
 class GroundCoordinatorRunner(ZmqStateMachine):
   
   def __init__(self):
@@ -130,7 +129,24 @@ class GroundCoordinatorRunner(ZmqStateMachine):
 
     print('Finished reading data!')
 
+    self.served_custs = []
+    d_dest_idx = 0
+    act_idx = 0
+    s_dwt = True
+    for act in self.actions:
+      if act == 0:
+        if s_dwt:
+          d_cust = self.drone_dests[d_dest_idx]
+          d_dest_idx += 1
+          self.served_custs.append(d_cust)
+        s_dwt = not s_dwt
+      else:
+        self.served_custs.append(act)
+
+    print('Served custs: ', self.served_custs)
+
     self.env = FlattenObservation(LiveNetDisEnv())
+    self.env.set_served_custs(self.served_custs)
     state_shape = self.env.observation_space.shape or self.env.observation_space.n
     print(f'State shape: {state_shape}')
     action_shape = self.env.action_space.shape or self.env.action_space.n
