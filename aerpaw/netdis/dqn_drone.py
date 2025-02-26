@@ -143,18 +143,15 @@ class DQNDrone(ZmqStateMachine):
         target_y = cust['y'] * 10
         print(f"Next target: {target_x}, {target_y}")
         self.is_moving = True
+
+
         moving = asyncio.ensure_future(drone.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
-        # if drone_out:
-        #     await asyncio.sleep(0.5) # Wait for drone to start moving
-        #     while not moving.done(): # Randomly simulate network outage
-        #         if random.random() < -1: #0.05: # 5% chance
-        #             print('Simulating network outage!')
-        #             moving.cancel()
-        #             self.network_disrupted = True
-        #         await asyncio.sleep(0.1)
-        # else:
         await moving
         self.is_moving = False
+
+        if next_waypoint == 5: # Hardcoded for now
+            await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_disrupted')
+
 
         print('sending callback_drone_finished_step')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_finished_step')

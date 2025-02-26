@@ -89,7 +89,8 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     self.rover_parked = False
     self.waiting_for_ping = False
     self.act_will_flip_dwt = False
-    self.request_park = False
+    self.requested_park = False
+    self.drone_disrupted = False
 
     print("Reading plan...")
     self.actions = []
@@ -351,6 +352,16 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     print('sending rover_next: ', rn)
     return rn
 
+  @state(name="recover_disruption")
+  async def recover_disruption(self, _):
+    print('Recovering from disruption!')
+    rover_pos = self.actions[self.rover_idx]
+    print('Rover position: ', rover_pos)
+    print('Completed actions: ', self.actions[0:self.rover_idx+1])
+    print('Disrupted customers: ', self.drone_dests[self.drone_idx])
+    return "wait_for_step"
+
+
 
   @state(name="wait_for_step")
   async def wait_for_step(self, _):
@@ -365,13 +376,24 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     if self.rover_parked and self.drone_landed:
       print('Drone landed and rover parked!')
       return
-    
+
+    if self.drone_disrupted:
+      print('Drone disrupted!')
+      if self.rover_finished_step:
+        self.drone_disrupted = False
+        return "recover_disruption"
+      else:
+        print('Waiting for rover to settle...')
+        await asyncio.sleep(0.5)
+        return "wait_for_step"
+
     if self.rover_idx >= len(self.actions) and self.drone_idx >= len(self.actions) and not self.requested_park:
       # Park
       await self.transition_runner(ZMQ_DRONE, 'step')
       await self.transition_runner(ZMQ_ROVER, 'step')
       self.requested_park = True
       return "wait_for_step"
+
     
     if self.rover_idx == self.drone_idx and self.rover_finished_step and self.drone_finished_step:
       # Simple case: drone and rover finished moving together
@@ -433,6 +455,12 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     print("Rover has parked!")
     self.rover_parked = True
     self.rover_finished_step = True
+    return "wait_for_step"
+
+  @state(name="callback_drone_disrupted")
+  async def callback_drone_disrupted(self, _):
+    print("Drone has been disrupted!")
+    self.drone_disrupted = True
     return "wait_for_step"
 
 
