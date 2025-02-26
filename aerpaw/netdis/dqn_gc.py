@@ -74,6 +74,7 @@ ZMQ_DRONE = "DRONE"
 
 # todo: we need to minimize deviation from original plan
 
+# todo: current bug: sends drone out for first waypoint but rover doesn't do anything
 class GroundCoordinatorRunner(ZmqStateMachine):
   
   def __init__(self):
@@ -195,7 +196,6 @@ class GroundCoordinatorRunner(ZmqStateMachine):
   
   @state(name="next_waypoint")
   async def next_waypoint(self, _):
-    print('Sending STEP to rover and drone')
 
 
     # When dwt: truck and drone must move in sync
@@ -222,7 +222,10 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     act = self.actions[self.rover_idx]
 
     if act == 0 and dwt: # If drone leaving truck, just skip the action
-      self.rover_idx += 1
+      print('Rover is skipping drone step')
+      self.rover_finished_step = True
+      await self.next_waypoint_rover(None)
+      return "wait_for_step"
 
     # But don't skip drone coming back!
 
@@ -237,6 +240,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     #     await self.transition_runner(ZMQ_DRONE, 'step')
     #     return
 
+    print('sending STEP to rover')
     await self.transition_runner(ZMQ_ROVER, 'step')
     return "wait_for_step"
   
@@ -249,16 +253,19 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     
     if self.drone_idx >= len(self.actions):
       # Park
+      print('sending STEP to drone')
       await self.transition_runner(ZMQ_DRONE, 'step')
       return "wait_for_step"
 
 
-    dwt = self.drone_with_truck(self.rover_idx) # Is drone already with truck?
+    dwt = self.drone_with_truck(self.drone_idx) # Is drone already with truck?
+    print('next_waypoint_drone dwt?: ', dwt)
 
     if not dwt: # If drone is not with truck, skip over rover actions
       while self.drone_idx < len(self.actions) and self.actions[self.drone_idx] != 0:
         self.drone_idx += 1
     
+    print('sending STEP to drone')
     await self.transition_runner(ZMQ_DRONE, 'step')
     return "wait_for_step"
 
@@ -334,6 +341,12 @@ class GroundCoordinatorRunner(ZmqStateMachine):
   @state(name="wait_for_step")
   async def wait_for_step(self, _):
     print('Waiting for step...')
+    dwt = self.drone_with_truck(self.rover_idx) # Drone is with truck before this move?
+    print('dwt: ', dwt)
+    print('rover_idx: ', self.rover_idx)
+    print('drone_idx: ', self.drone_idx)
+    print('actions: ', self.actions)
+    print('rover_finished: ', self.rover_finished_step)
     if self.rover_parked and self.drone_landed:
       print('Drone landed and rover parked!')
       return
@@ -344,7 +357,6 @@ class GroundCoordinatorRunner(ZmqStateMachine):
       return "next_waypoint"
     
 
-    dwt = self.drone_with_truck(self.rover_idx) # Drone is with truck before this move?
 
     # Case: drone is out, rover finished step and is waiting for drone
     if not dwt and self.actions[self.rover_idx] == 0 and self.rover_finished_step:
@@ -367,7 +379,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
       else:
         print('drone waiting, rover finished, different idx')
 
-    
+    await asyncio.sleep(3)
 
     return "wait_for_step"
     

@@ -88,9 +88,11 @@ class DQNRover(ZmqStateMachine):
 
     @state(name="follow_route")
     async def follow_route(self, rover: Drone):
+        print('Following route!')
         self._next_step = False
 
-        next_waypoint = await self.query_field(ZMQ_COORDINATOR, "drone_next")
+        next_waypoint = await self.query_field(ZMQ_COORDINATOR, "rover_next")
+        print('next_waypoint: ', next_waypoint)
 
         if next_waypoint == -1:
             return "park"
