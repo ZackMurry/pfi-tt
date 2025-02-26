@@ -156,11 +156,8 @@ class DQNDrone(ZmqStateMachine):
         await moving
         self.is_moving = False
 
-        if self.dwt:
-            print('Finished step [dwt]')
-            await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_finished_step')
-        else: # Not waiting and not with the truck = keep going (i.e., go to the future truck_location)
-            return "follow_route"
+        print('sending callback_drone_finished_step')
+        await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_finished_step')
 
         return "wait_for_step"
 
