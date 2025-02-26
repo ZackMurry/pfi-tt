@@ -40,7 +40,9 @@ class DQNRover(ZmqStateMachine):
 
     @state(name="wait_for_start", first=True)
     async def wait_for_start(self, _):
+        # print('wait_for_start')
         if self._takeoff_ordered:
+            print('Received takeoff message!')
             return "start"
         else:
             print('Waiting for start...')
@@ -55,7 +57,6 @@ class DQNRover(ZmqStateMachine):
 
     @state(name="start")
     async def start(self, rover: Drone):
-        print('Received takeoff message!')
         print('Starting rover...')
         await rover.takeoff(50)
         self.takeoff_pos = rover.position
@@ -65,7 +66,6 @@ class DQNRover(ZmqStateMachine):
         print(f"Start pos: {self.start_pos}")
         print('Sending callback to coordinator...')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_taken_off')
-        print('Following route...')
         return "wait_for_step"
 
     @state(name="wait_for_step")
@@ -97,18 +97,14 @@ class DQNRover(ZmqStateMachine):
         if next_waypoint == -1:
             return "park"
         
-        if next_waypoint == 0:
-            await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_finished_step')
-            return "wait_for_step"
-
         cust = self.customers[next_waypoint - 1]
         target_x = cust['x'] * 10
         target_y = cust['y'] * 10
         print(f"Next target: {target_x}, {target_y}")
         moving = asyncio.ensure_future(rover.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
-        self.action_idx += 1
 
         await moving
+        print('sending callback_rover_finished_step')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_finished_step')
 
         return "wait_for_step"
