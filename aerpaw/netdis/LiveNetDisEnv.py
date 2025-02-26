@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from time import sleep
 from datetime import datetime
 from types import SimpleNamespace
-from DisruptedScenario import DisruptedScenario
+from LiveScenario import LiveScenario
 from math import pow, sqrt
 
 # todo: add requirement for truck and drone to end at depot
@@ -18,7 +18,7 @@ class LiveNetDisEnv(gym.Env):
     def __init__(self, *args, **kwargs):
         self.DRONE_SPEED_FACTOR = 1
         self.SHOW_HEURISTIC = False
-        self.scenario = DisruptedScenario()
+        self.scenario = LiveScenario() # todo: make sure this isn't cleared on reset
         self.t = 0
         self.x = 0
         self.y = 0
@@ -44,7 +44,7 @@ class LiveNetDisEnv(gym.Env):
         self.max_rejections = 4
         self.step_limit = self.MAX_QUEUE + self.max_rejections
         self.rejections = 0
-        self.draw_all = True
+        self.draw_all = False
 
 
         # drone flag + truck path + empty
@@ -250,7 +250,7 @@ class LiveNetDisEnv(gym.Env):
         self.step_count = 0
         self.rejections = 0
         self.customers = []
-        self.scenario = DisruptedScenario()
+        self.scenario = LiveScenario()
         self.request = self.scenario.request()
         self.proposed_route = self._propose_route()
         self.planned_route = []

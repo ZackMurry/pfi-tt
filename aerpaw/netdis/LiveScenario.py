@@ -156,15 +156,6 @@ class DisruptedScenario():
         "disrupted": 0
       },
     ]
-    for req in self.requests:
-      req['deadline'] *= 1
-      if not self.disruptions_enabled:
-        req['disrupted'] = 0
-      elif self.random_disruptions:
-        if random() < 0.15:
-          req['disrupted'] = 1
-        else:
-          req['disrupted'] = 0
 
 
   def request(self):
@@ -173,16 +164,12 @@ class DisruptedScenario():
     # print(self.requests[0])
     return self.requests.pop(0)
 
-  def export(self):
-    with open(f"export_disrupted.scenario", 'w') as f:
-      f.write(f"{len(self.requests)}\n")
-      for req in self.requests:
-        f.write(f"{req['x']} {req['y']} {req['deadline']}\n")
-      
-  def set_disruptions_enabled(self, val):
-    self.disruptions_enabled = val
-    # print('Disruptions enabled?', self.disruptions_enabled)
-    if not val:
-      for req in self.requests:
-        req['disrupted'] = 0
+  def filter_requests(self, arr):
+    valid_reqs = []
+    for i in range(len(self.requests)):
+      if (i+1) in arr:
+        valid_reqs.append(self.requests[i])
+    print('valid reqs')
+    print(valid_reqs)
+    self.requests = valid_reqs
   

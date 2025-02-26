@@ -131,7 +131,6 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     print('Finished reading data!')
 
     self.env = FlattenObservation(LiveNetDisEnv())
-    self.env.draw_all = True
     state_shape = self.env.observation_space.shape or self.env.observation_space.n
     print(f'State shape: {state_shape}')
     action_shape = self.env.action_space.shape or self.env.action_space.n
@@ -371,6 +370,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     # --> this ensures that our remaining path is still similar to the original one (due to influence of order)
     # TODO: generate next steps
     
+
     return "wait_for_step"
 
 
