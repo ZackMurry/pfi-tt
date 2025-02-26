@@ -91,13 +91,14 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     self.act_will_flip_dwt = False
     self.requested_park = False
     self.drone_disrupted = False
+    self.disrupted_custs = []
 
     print("Reading plan...")
     self.actions = []
     self.rover_idx = -1
     self.drone_idx = -1
     self.drone_dests = []
-    self.drone_dest_idx = 0
+    self.drone_dest_idx = -1
 
     plan_file_name = '/root/netdis.plan'
     print(f"Reading plan from {plan_file_name}...")
@@ -275,6 +276,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
         self.drone_idx += 1
     
     print('sending STEP to drone')
+    self.drone_dest_idx += 1
     await self.transition_runner(ZMQ_DRONE, 'step')
     return "wait_for_step"
 
@@ -358,7 +360,17 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     rover_pos = self.actions[self.rover_idx]
     print('Rover position: ', rover_pos)
     print('Completed actions: ', self.actions[0:self.rover_idx+1])
-    print('Disrupted customers: ', self.drone_dests[self.drone_idx])
+    dest_idx = self.get_drone_dest(self.drone_idx)
+    print('Disrupted dest idx: ', dest_idx)
+    print('Disrupted customer: ', self.drone_dests[dest_idx])
+    self.disrupted_custs.append(self.drone_dests[dest_idx])
+    # only consider nodes in self.actions -- we only have the packages for these nodes
+    # (implicit) first meet up with truck to exchange packages for drone
+    # --> therefore, we must end the "preset" path with truck==drone
+    # then feed the remaining customers into the program in order
+    # --> this ensures that our remaining path is still similar to the original one (due to influence of order)
+    # TODO: generate next steps
+    
     return "wait_for_step"
 
 

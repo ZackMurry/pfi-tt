@@ -3,7 +3,7 @@ from random import random
 class DisruptedScenario():
   def __init__(self):
     self.disruptions_enabled = True
-    self.random_disruptions = True
+    # self.random_disruptions = True
     self.requests = [
       {
         "x": 2,
@@ -21,13 +21,13 @@ class DisruptedScenario():
         "x": 3,
         "y": 6,
         "deadline": 30,
-        "disrupted": 1
+        "disrupted": 0
       },
       {
         "x": 3,
         "y": 9,
         "deadline": 34,
-        "disrupted": 1
+        "disrupted": 0
       },
       # {
       #   "x": 19,
@@ -39,7 +39,7 @@ class DisruptedScenario():
         "x": 2,
         "y": 4,
         "deadline": 45,
-        "disrupted": 1
+        "disrupted": 0
       },
       {
         "x": 5,
@@ -185,3 +185,4 @@ class DisruptedScenario():
     if not val:
       for req in self.requests:
         req['disrupted'] = 0
+  
