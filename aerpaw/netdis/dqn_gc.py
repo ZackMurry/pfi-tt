@@ -145,17 +145,29 @@ class GroundCoordinatorRunner(ZmqStateMachine):
 
     print('Served custs: ', self.served_custs)
 
-    self.env = FlattenObservation(LiveNetDisEnv())
+    self.env = LiveNetDisEnv()
     self.env.set_served_custs(self.served_custs)
-    state_shape = self.env.observation_space.shape or self.env.observation_space.n
+    self.flat_env = FlattenObservation(self.env)
+    state_shape = self.flat_env.observation_space.shape or self.flat_env.observation_space.n
     print(f'State shape: {state_shape}')
-    action_shape = self.env.action_space.shape or self.env.action_space.n
+    action_shape = self.flat_env.action_space.shape or self.flat_env.action_space.n
     print(f"action shape: {action_shape}")
 
     self.model = Net(state_shape, action_shape)
     # model.load_state_dict(torch.load("good_netdis_policy.pth"))
     self.model.load_state_dict(torch.load("netdis_policy_5.pth"))
     print('Loaded model!')
+    optim = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+    self.policy = ts.policy.DQNPolicy(
+        model=self.model,
+        optim=optim,
+        action_space=self.flat_env.action_space,
+        discount_factor=0.9,
+        estimation_step=3,
+        target_update_freq=320
+    )
+    self.policy.eval()
+    print('Created policy!')
 
   @state(name="take_off", first=True)
   async def take_off(self, _):
@@ -379,12 +391,34 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     print('Disrupted dest idx: ', dest_idx)
     print('Disrupted customer: ', self.drone_dests[dest_idx])
     self.disrupted_custs.append(self.drone_dests[dest_idx])
+    self.env.set_preset_route(self.actions[0:self.rover_idx+1])
+    print(dir(self.flat_env))
+
     # only consider nodes in self.actions -- we only have the packages for these nodes
     # (implicit) first meet up with truck to exchange packages for drone
     # --> therefore, we must end the "preset" path with truck==drone
     # then feed the remaining customers into the program in order
     # --> this ensures that our remaining path is still similar to the original one (due to influence of order)
     # TODO: generate next steps
+    print(state)
+    state_tensor = Batch(obs=[state])
+    setattr(state_tensor, 'info', {})
+
+    with torch.no_grad():
+        is_done = False
+        steps = 0
+        while not is_done:
+            steps += 1
+            result = self.policy(state_tensor)
+            action = result.act[0]
+            print(env.planned_route)
+            next_state, reward, done, truncated, info = self.flat_env.step(action)
+            is_done = done
+            print('Done?', is_done)
+            state_tensor = Batch(obs=[next_state])
+            setattr(state_tensor, 'info', {})
+            print('Action: ', action - 1, 'Reward: ', reward)
+    print('Num steps: ', steps)
     
 
     return "wait_for_step"

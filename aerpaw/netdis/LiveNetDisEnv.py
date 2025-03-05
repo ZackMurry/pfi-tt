@@ -384,6 +384,9 @@ class LiveNetDisEnv(gym.Env):
         return obs, {}
         # return flatten(self.observation_space, obs), {}
     
+    def get_state(self):
+        return self.state
+    
     def render(self):
         if not self.render_ready:
             self.render_ready = True
@@ -393,6 +396,13 @@ class LiveNetDisEnv(gym.Env):
     
     def set_served_custs(self, the_list):
         self.scenario.set_served_custs(the_list)
+    
+    def set_preset_route(self, action_list, drone_custs):
+        self.planned_route = action_list
+        self.drone_route = drone_custs
+        self.step_count = len(self.planned_route)
+        return self.update_state(), {}
+
 
 def save_log(data, name):
     if len(data) == 0:
