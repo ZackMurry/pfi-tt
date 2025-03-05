@@ -145,12 +145,11 @@ class GroundCoordinatorRunner(ZmqStateMachine):
 
     print('Served custs: ', self.served_custs)
 
-    self.env = LiveNetDisEnv()
-    self.env.set_served_custs(self.served_custs)
-    self.flat_env = FlattenObservation(self.env)
-    state_shape = self.flat_env.observation_space.shape or self.flat_env.observation_space.n
+    self.env = FlattenObservation(LiveNetDisEnv())
+    self.env.unwrapped.set_served_custs(self.served_custs)
+    state_shape = self.env.observation_space.shape or self.env.observation_space.n
     print(f'State shape: {state_shape}')
-    action_shape = self.flat_env.action_space.shape or self.flat_env.action_space.n
+    action_shape = self.env.action_space.shape or self.env.action_space.n
     print(f"action shape: {action_shape}")
 
     self.model = Net(state_shape, action_shape)
@@ -161,7 +160,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     self.policy = ts.policy.DQNPolicy(
         model=self.model,
         optim=optim,
-        action_space=self.flat_env.action_space,
+        action_space=self.env.action_space,
         discount_factor=0.9,
         estimation_step=3,
         target_update_freq=320
@@ -390,9 +389,23 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     dest_idx = self.get_drone_dest(self.drone_idx)
     print('Disrupted dest idx: ', dest_idx)
     print('Disrupted customer: ', self.drone_dests[dest_idx])
+    print('Drone customers served: ', self.drone_dests[0:dest_idx])
+    revised_actions = self.actions[0:self.rover_idx+1]
+    last_zero = len(revised_actions) - 1 - revised_actions[::-1].index(0)
+    revised_actions.pop(last_zero)
+    def last_non_zero_before(arr, index):
+      for i in range(index - 1, -1, -1):  # Iterate backwards from index - 1
+          if arr[i] != 0:
+              return arr[i]
+      return None  # Return None if no non-zero element is found
+    last_nz = last_non_zero_before(revised_actions, last_zero)
+    print('Last truck dest before drone [where is drone returning to?]: ', last_nz)
+    revised_actions.append(last_nz)
+    print('Revised actions: ', revised_actions)
+
     self.disrupted_custs.append(self.drone_dests[dest_idx])
-    self.env.set_preset_route(self.actions[0:self.rover_idx+1])
-    print(dir(self.flat_env))
+    
+    self.env.unwrapped.set_preset_route(revised_actions, self.drone_dests[0:dest_idx])
 
     # only consider nodes in self.actions -- we only have the packages for these nodes
     # (implicit) first meet up with truck to exchange packages for drone
@@ -412,7 +425,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
             result = self.policy(state_tensor)
             action = result.act[0]
             print(env.planned_route)
-            next_state, reward, done, truncated, info = self.flat_env.step(action)
+            next_state, reward, done, truncated, info = self.env.step(action)
             is_done = done
             print('Done?', is_done)
             state_tensor = Batch(obs=[next_state])

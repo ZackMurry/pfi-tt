@@ -401,7 +401,7 @@ class LiveNetDisEnv(gym.Env):
         self.planned_route = action_list
         self.drone_route = drone_custs
         self.step_count = len(self.planned_route)
-        return self.update_state(), {}
+        return self._update_state(), {}
 
 
 def save_log(data, name):
