@@ -214,6 +214,7 @@ class LiveNetDisEnv(gym.Env):
         if self.step_count > 5 and 0 not in self.planned_route:
             reward -= 3
 
+        print('current route: ', self.planned_route)
         return self.state, reward, done, (self.step_count >= self.step_limit), {}
 
     def _node_dist(self, a, b):
@@ -376,6 +377,9 @@ class LiveNetDisEnv(gym.Env):
         return np.sqrt(np.power(N0[0] - N1[0], 2) + np.power(N0[1] - N1[1], 2))
             
     def step(self, action):
+        if action == -10:
+            print('sentinel step')
+            return self.state, 0, False, False, {}
         print(f"moving to {action}")
         return self._STEP(action)
 
@@ -394,13 +398,19 @@ class LiveNetDisEnv(gym.Env):
     def seed(self, seed):
         np.random.seed(seed)
     
-    def set_served_custs(self, the_list):
-        self.scenario.set_served_custs(the_list)
+    def set_served_custs(self, served_custs):
+        self.scenario.set_served_custs(served_custs)
+        # Need to set self.customers to the list of served customers in order
+        # And also set self.planned_route and self.drone_route to reflect self.customers
     
     def set_preset_route(self, action_list, drone_custs):
-        self.planned_route = action_list
-        self.drone_route = drone_custs
+        self.planned_route = self.scenario.translate_custs(action_list)
+        self.drone_route = self.scenario.translate_custs(drone_custs)
         self.step_count = len(self.planned_route)
+        # todo: we need to only set the custs as the ones that are actually served at the current time
+        self.customers = self.scenario.get_served_custs()
+        if self.request == None:
+            self.request = self.scenario.request()
         return self._update_state(), {}
 
 

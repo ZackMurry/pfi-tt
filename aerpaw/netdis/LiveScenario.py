@@ -162,9 +162,11 @@ class LiveScenario():
 
   def request(self):
     if self.order_idx >= len(self.order):
+      print('No more requests!')
       return None
     req = self.requests[self.order[self.order_idx]]
     self.order_idx += 1
+    print('LIVE SCENARIO: ', req, ' requested')
     return req
 
   def reset(self):
@@ -176,4 +178,26 @@ class LiveScenario():
   # When we give a preset planned route, we need to skip to idx to not re-give the preset customers
   def set_order_index(self, idx):
     self.order_idx = idx
+
+  def get_served_custs(self):
+    custs = []
+    for idx in self.order:
+      custs.append(self.requests[idx-1])
+    print('Customers in order', custs)
+    return custs
+  
+  # Switch from absolute indices to served indices
+  # ex for self.order = [1,3,4,5,6,9,7,8]:
+  # [0,3,0,4,0,6,9,7,8,0] -> [0,2,0,3,0,5,6,7,8,0]
+  def translate_custs(self, cust_list):
+    custs = []
+    print('Translating cust_list', cust_list)
+    for c in cust_list:
+      if c != 0:
+        custs.append(self.order.index(c)+1)
+      else:
+        custs.append(0)
+    print('Translated', custs)
+    return custs
+
 

@@ -30,6 +30,7 @@ import gymnasium as gym
 import tianshou as ts
 from tianshou.policy import BasePolicy
 from tianshou.data import Batch
+import sys
 
 gym.envs.register(
     #  id='SimpleHeuristicTSPEnv-v0',
@@ -57,6 +58,7 @@ class Net(torch.nn.Module):
 
     def forward(self, obs, state=None, info={}):
         if not isinstance(obs, torch.Tensor):
+            print("OBS", obs)
             obs = torch.tensor(obs, dtype=torch.float)#, device=device)
         batch = obs.shape[0]
         logits = self.model(obs.view(batch, -1))
@@ -404,7 +406,24 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     print('Revised actions: ', revised_actions)
 
     self.disrupted_custs.append(self.drone_dests[dest_idx])
+    cur_served_custs = []
+    d_dest_idx = 0
+    act_idx = 0
+    s_dwt = True
+    for act in revised_actions:
+      if act == 0:
+        if s_dwt:
+          d_cust = self.drone_dests[d_dest_idx]
+          d_dest_idx += 1
+          cur_served_custs.append(d_cust)
+        s_dwt = not s_dwt
+      elif act not in cur_served_custs:
+        cur_served_custs.append(act)
     
+    print('Current served custs: ', cur_served_custs)
+    # probably don't need a global self.served_custs
+    self.env.unwrapped.set_served_custs(cur_served_custs)
+
     self.env.unwrapped.set_preset_route(revised_actions, self.drone_dests[0:dest_idx])
 
     # only consider nodes in self.actions -- we only have the packages for these nodes
@@ -413,6 +432,10 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     # then feed the remaining customers into the program in order
     # --> this ensures that our remaining path is still similar to the original one (due to influence of order)
     # TODO: generate next steps
+
+    print('Served custs: ', self.served_custs)
+    state, *rest = self.env.step(-10)
+    print("Got sential step")
     print(state)
     state_tensor = Batch(obs=[state])
     setattr(state_tensor, 'info', {})
@@ -424,7 +447,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
             steps += 1
             result = self.policy(state_tensor)
             action = result.act[0]
-            print(env.planned_route)
+            print('GC Planned route: ', self.env.unwrapped.planned_route)
             next_state, reward, done, truncated, info = self.env.step(action)
             is_done = done
             print('Done?', is_done)
@@ -432,6 +455,9 @@ class GroundCoordinatorRunner(ZmqStateMachine):
             setattr(state_tensor, 'info', {})
             print('Action: ', action - 1, 'Reward: ', reward)
     print('Num steps: ', steps)
+    print('Final route', self.env.unwrapped.planned_route)
+    print('Final drone dests', self.env.unwrapped.drone_route)
+    sys.exit(0)
     
 
     return "wait_for_step"
