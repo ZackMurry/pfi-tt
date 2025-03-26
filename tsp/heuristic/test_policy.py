@@ -45,7 +45,7 @@ print('Starting...')
 
 ZMQ_COORDINATOR = 'COORDINATOR'
 
-env = FlattenObservation(LiveNetDisEnv())
+env = Flat^tenObservation(LiveNetDisEnv())
 env.draw_all = True
 state_shape = env.observation_space.shape or env.observation_space.n
 print(f'State shape: {state_shape}')
