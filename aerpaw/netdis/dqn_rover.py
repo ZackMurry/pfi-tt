@@ -2,6 +2,7 @@ from aerpawlib.runner import ZmqStateMachine, entrypoint, state, timed_state
 from aerpawlib.vehicle import Drone
 from aerpawlib.util import Coordinate, VectorNED
 import asyncio
+import random
 from sys import exit
 
 print('Starting...')
@@ -17,6 +18,7 @@ class DQNRover(ZmqStateMachine):
         self._takeoff_ordered = False
         self._next_step = False
         self._dwt = True
+        self.sleeps = 0
         
         scenario_file_name = '/root/netdis.scenario'
         print(f"Reading scenario file from {scenario_file_name}...")
@@ -58,10 +60,10 @@ class DQNRover(ZmqStateMachine):
     @state(name="start")
     async def start(self, rover: Drone):
         print('Starting rover...')
-        await rover.takeoff(50)
+        # await rover.takeoff(50)
         self.takeoff_pos = rover.position
         print('Moving under drone...')
-        await asyncio.ensure_future(rover.goto_coordinates(Coordinate(35.7274825,-78.696275,50)))
+        # await asyncio.ensure_future(rover.goto_coordinates(Coordinate(35.7274825,-78.696275,50)))
         self.start_pos = rover.position
         print(f"Start pos: {self.start_pos}")
         print('Sending callback to coordinator...')
@@ -71,11 +73,17 @@ class DQNRover(ZmqStateMachine):
     @state(name="wait_for_step")
     async def wait_for_step(self, _):
         if self._next_step:
+            self.sleeps = 0
             print('Received STEP!')
             return "follow_route"
         else:
             print('Waiting for step...')
             await asyncio.sleep(0.1)
+            self.sleeps += 1
+            if self.sleeps > 30:
+                print('re-sending callback_rover_finished_step')
+                await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_finished_step')
+                self.sleeps = 0
             return "wait_for_step"
     
     @state(name="step")
@@ -101,9 +109,13 @@ class DQNRover(ZmqStateMachine):
         target_x = cust['x'] * 10
         target_y = cust['y'] * 10
         print(f"Next target: {target_x}, {target_y}")
-        moving = asyncio.ensure_future(rover.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
 
-        await moving
+        print('sleeping!')
+        await asyncio.sleep(random.uniform(0.5,5))
+        print('done sleeping!')
+        # moving = asyncio.ensure_future(rover.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
+
+        # await moving
         print('sending callback_rover_finished_step')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_finished_step')
 
@@ -113,7 +125,7 @@ class DQNRover(ZmqStateMachine):
     async def park(self, rover: Drone):
         print('Parking...')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_parked')
-        await asyncio.ensure_future(rover.goto_coordinates(self.takeoff_pos))
-        await rover.land()
+        # await asyncio.ensure_future(rover.goto_coordinates(self.takeoff_pos))
+        # await rover.land()
         print('Parked!')
 
