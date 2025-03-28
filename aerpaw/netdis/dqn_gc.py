@@ -422,9 +422,9 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     
     print('Current served custs: ', cur_served_custs)
     # probably don't need a global self.served_custs
-    self.env.unwrapped.set_served_custs(cur_served_custs)
+    self.env.unwrapped.set_served_custs(self.served_custs)
 
-    self.env.unwrapped.set_preset_route(revised_actions, self.drone_dests[0:dest_idx])
+    self.env.unwrapped.set_preset_route(revised_actions, self.drone_dests[0:dest_idx], cur_served_custs)
 
     # only consider nodes in self.actions -- we only have the packages for these nodes
     # (implicit) first meet up with truck to exchange packages for drone
@@ -435,7 +435,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
 
     print('Served custs: ', self.served_custs)
     state, *rest = self.env.step(-10)
-    print("Got sential step")
+    print("Got sentinel step")
     print(state)
     state_tensor = Batch(obs=[state])
     setattr(state_tensor, 'info', {})
@@ -455,16 +455,23 @@ class GroundCoordinatorRunner(ZmqStateMachine):
             setattr(state_tensor, 'info', {})
             print('Action: ', action - 1, 'Reward: ', reward)
     print('Num steps: ', steps)
-    print('Final route', self.env.unwrapped.planned_route)
-    print('Final drone dests', self.env.unwrapped.drone_route)
-    print("Old actions " + self.actions)
-    print("Cutoff at " + self.rover_idx)
-    self.actions = self.env.unwrapped.planned_route
-    self.drone_dests = self.env.unwrapped.drone_route
+    print('Translated route', self.env.unwrapped.planned_route)
+    new_route = self.env.unwrapped.get_planned_route()
+    print('Untranslated new route', new_route)
+    print('Translated drone route' ,self.env.unwrapped.drone_route)
+    new_drone_route = self.env.unwrapped.get_drone_route()
+    print('Untranslated drone dests', new_drone_route)
+    print("Old actions ", self.actions)
+    print("Cutoff at ", self.rover_idx)
+    self.actions = new_route
+    self.drone_dests = new_drone_route
     self.rover_finished_step = True
     self.drone_finished_step = True
     self.drone_disrupted = False
+    self.rover_idx = len(revised_actions)
+    self.drone_idx = len(revised_actions)
 
+    print('new idx:', self.rover_idx)
     
     return "wait_for_step"
 
@@ -478,6 +485,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     print('rover_idx: ', self.rover_idx)
     print('drone_idx: ', self.drone_idx)
     print('actions: ', self.actions)
+    print('drone_dests: ', self.drone_dests)
     print('drone_finished: ', self.drone_finished_step)
     print('rover_finished: ', self.rover_finished_step)
     if self.rover_parked and self.drone_landed:
