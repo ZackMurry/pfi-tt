@@ -77,6 +77,13 @@ class LiveNetDisEnv(gym.Env):
 
 
     def _STEP(self, action):
+        print("STEP | state")
+        print("planned_route " + self.planned_route)
+        print("drone_route " + self.drone_route)
+        print("proposed_route " + self.proposed_route)
+        print("request" + self.request)
+        print("customers " + self.customers)
+        print("rejections " + self.rejections)
         done = False
         action -= 1 # Reject: -1, Drone: 0, Path: [1,n]
         if action-1 > len(self.planned_route):

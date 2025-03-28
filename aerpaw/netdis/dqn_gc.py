@@ -457,9 +457,15 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     print('Num steps: ', steps)
     print('Final route', self.env.unwrapped.planned_route)
     print('Final drone dests', self.env.unwrapped.drone_route)
-    sys.exit(0)
-    
+    print("Old actions " + self.actions)
+    print("Cutoff at " + self.rover_idx)
+    self.actions = self.env.unwrapped.planned_route
+    self.drone_dests = self.env.unwrapped.drone_route
+    self.rover_finished_step = True
+    self.drone_finished_step = True
+    self.drone_disrupted = False
 
+    
     return "wait_for_step"
 
 
@@ -480,11 +486,11 @@ class GroundCoordinatorRunner(ZmqStateMachine):
 
     if self.drone_disrupted:
       print('Drone disrupted!')
-      if self.rover_finished_step:
+      if self.rover_finished_step and self.drone_finished_step:
         self.drone_disrupted = False
         return "recover_disruption"
       else:
-        print('Waiting for rover to settle...')
+        print('Waiting for drone+rover to settle...')
         await asyncio.sleep(0.5)
         return "wait_for_step"
 
