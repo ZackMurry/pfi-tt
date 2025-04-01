@@ -45,6 +45,7 @@ model = Net(state_shape, action_shape)
 model.load_state_dict(torch.load("netdis_policy.pth"))
 
 
+mock = True
 
 class DQNDrone(ZmqStateMachine):
 
@@ -97,7 +98,8 @@ class DQNDrone(ZmqStateMachine):
     @state(name="start")
     async def start(self, drone: Drone):
         print('Taking off...')
-        # await drone.takeoff(60)
+        if not mock:
+            await drone.takeoff(60)
         print('Finished taking off! Reached 50m')
         self.start_pos = drone.position
         print(f"Start pos: {self.start_pos}")
@@ -154,12 +156,13 @@ class DQNDrone(ZmqStateMachine):
         print(f"Next target: {target_x}, {target_y}")
         self.is_moving = True
 
-
-        # moving = asyncio.ensure_future(drone.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
-        # await moving
-        print('sleeping!')
-        await asyncio.sleep(random.uniform(0.5,5))
-        print('done sleeping!')
+        if not mock:
+            moving = asyncio.ensure_future(drone.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
+            await moving
+        else:
+            print('sleeping!')
+            await asyncio.sleep(random.uniform(0.5,5))
+            print('done sleeping!')
         self.is_moving = False
 
         if next_waypoint == 5: # Hardcoded for now
@@ -167,12 +170,14 @@ class DQNDrone(ZmqStateMachine):
             await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_disrupted')
             self.is_moving = True
             print('moving from ', drone.position)
-            # moving = asyncio.ensure_future(drone.goto_coordinates(step_start_pos)) # Go back to start point for step
             print('moving to ', step_start_pos)
-            # await moving
-            print('sleeping!')
-            await asyncio.sleep(random.uniform(0.5,5))
-            print('done sleeping!')
+            if not mock:
+                moving = asyncio.ensure_future(drone.goto_coordinates(step_start_pos)) # Go back to start point for step
+                await moving
+            else:
+                print('sleeping!')
+                await asyncio.sleep(random.uniform(0.5,5))
+                print('done sleeping!')
             print('new pos ', drone.position)
             self.is_moving = False
             self.finished = True
