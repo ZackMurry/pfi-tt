@@ -56,6 +56,8 @@ class DQNDrone(ZmqStateMachine):
         self._next_step = False
         self._is_moving = False
         self.network_disrupted = False
+        self.finished = True
+        self.sleeps = 0
         
         scenario_file_name = '/root/netdis.scenario'
         print(f"Reading scenario file from {scenario_file_name}...")
@@ -95,7 +97,7 @@ class DQNDrone(ZmqStateMachine):
     @state(name="start")
     async def start(self, drone: Drone):
         print('Taking off...')
-        await drone.takeoff(60)
+        # await drone.takeoff(60)
         print('Finished taking off! Reached 50m')
         self.start_pos = drone.position
         print(f"Start pos: {self.start_pos}")
@@ -116,15 +118,22 @@ class DQNDrone(ZmqStateMachine):
     @state(name="wait_for_step")
     async def wait_for_step(self, _):
         if self._next_step:
+            self.sleeps = 0
             return "follow_route"
         else:
             print('Waiting for step...')
             await asyncio.sleep(0.5)
+            self.sleeps += 1
+            if self.sleeps > 30:
+                print('re-sending callback_drone_finished_step')
+                await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_finished_step')
+                self.sleeps = 0
             return "wait_for_step"
     
     @state(name="step")
     async def step(self, _):
         self._next_step = True
+        self.finished = False
         return "wait_for_step"
 
     @state(name="follow_route")
@@ -138,6 +147,7 @@ class DQNDrone(ZmqStateMachine):
         if next_waypoint == -1:
             return "land"
 
+        step_start_pos = drone.position
         cust = self.customers[next_waypoint - 1]
         target_x = cust['x'] * 10
         target_y = cust['y'] * 10
@@ -145,16 +155,32 @@ class DQNDrone(ZmqStateMachine):
         self.is_moving = True
 
 
-        moving = asyncio.ensure_future(drone.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
-        await moving
+        # moving = asyncio.ensure_future(drone.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
+        # await moving
+        print('sleeping!')
+        await asyncio.sleep(random.uniform(0.5,5))
+        print('done sleeping!')
         self.is_moving = False
 
         if next_waypoint == 5: # Hardcoded for now
+            print('sending disruption!')
             await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_disrupted')
-
-
-        print('sending callback_drone_finished_step')
-        await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_finished_step')
+            self.is_moving = True
+            print('moving from ', drone.position)
+            # moving = asyncio.ensure_future(drone.goto_coordinates(step_start_pos)) # Go back to start point for step
+            print('moving to ', step_start_pos)
+            # await moving
+            print('sleeping!')
+            await asyncio.sleep(random.uniform(0.5,5))
+            print('done sleeping!')
+            print('new pos ', drone.position)
+            self.is_moving = False
+            self.finished = True
+            await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_finished_step')
+        else:
+            self.finished = True
+            print('sending callback_drone_finished_step')
+            await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_finished_step')
 
         return "wait_for_step"
 
@@ -162,6 +188,11 @@ class DQNDrone(ZmqStateMachine):
     async def land(self, drone: Drone):
         print('Landing...')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_landed')
-        await asyncio.ensure_future(drone.goto_coordinates(self.start_pos))
-        await drone.land()
+        # await asyncio.ensure_future(drone.goto_coordinates(self.start_pos))
+        # await drone.land()
         print('Landed...')
+    
+
+    @expose_field_zmq(name="finished")
+    async def is_drone_finished(self, _):
+        return self.finished
