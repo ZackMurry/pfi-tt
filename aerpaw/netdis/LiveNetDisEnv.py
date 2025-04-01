@@ -105,8 +105,9 @@ class LiveNetDisEnv(gym.Env):
                     # print('drone')
                     if self.request['disrupted']:
                         # print(self.request)
+                        print('Persisting through disruption')
                         reward -= 10
-                        done = True
+                        # done = True
                         # done = True`
                     # else:
                     #     reward += 1
@@ -165,7 +166,8 @@ class LiveNetDisEnv(gym.Env):
                     dwt = False
                     if time + drone_time > cust['deadline']:
                         reward -= 1
-                        done = True
+                        print('Missed deadline! [drone]')
+                        #done = True
                         # break
                 else: # Send drone back
                     cust = self.customers[self.drone_route[drone_idx]-1]
@@ -180,7 +182,8 @@ class LiveNetDisEnv(gym.Env):
             cust = self.customers[dest-1]
             dt = self._get_travel_time(vx, vy, cust)
             if time + dt > cust['deadline']:
-                done = True
+                print('Missed deadline! [truck]')
+                # done = True
                 reward -= 1
                 time += dt
                 self.remaining[dest-1] = cust['deadline'] - time
@@ -192,12 +195,13 @@ class LiveNetDisEnv(gym.Env):
         
         self._update_state()
 
-        if (done or self.step_count >= self.step_limit):
+        if (done or self.step_count >= self.step_limit) and len(self.planned_route) < self.MAX_QUEUE:
             num_drone_steps = 0
             for i in range(len(self.planned_route)):
                 if self.planned_route[i] == 0:
                     num_drone_steps += 1
             if num_drone_steps % 2 == 1:
+                print('Appending 0 to route')
                 self.planned_route.append(0)
 
         # if self.draw_all and (done or self.step_count >= self.step_limit):
@@ -215,6 +219,9 @@ class LiveNetDisEnv(gym.Env):
             reward -= 3
 
         print('current route: ', self.planned_route)
+        print('returning state: ', self.state)
+        if len(self.planned_route) >= self.MAX_QUEUE:
+            done = True
         return self.state, reward, done, (self.step_count >= self.step_limit), {}
 
     def _node_dist(self, a, b):

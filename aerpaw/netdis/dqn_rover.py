@@ -4,10 +4,13 @@ from aerpawlib.util import Coordinate, VectorNED
 import asyncio
 import random
 from sys import exit
+from time import time
 
 print('Starting...')
 
 ZMQ_COORDINATOR = 'COORDINATOR'
+
+mock = True
 
 class DQNRover(ZmqStateMachine):
 
@@ -52,7 +55,8 @@ class DQNRover(ZmqStateMachine):
             return "wait_for_start"
         
     @state(name="take_off")
-    async def take_off(self, _):
+    async def take_off(self, rover: Drone):
+        rover._mission_start_time = time.time()
         print('Takeoff ordered!')
         self._takeoff_ordered = True
         return "wait_for_start"
@@ -60,10 +64,12 @@ class DQNRover(ZmqStateMachine):
     @state(name="start")
     async def start(self, rover: Drone):
         print('Starting rover...')
-        # await rover.takeoff(50)
+        if not mock:
+            await rover.takeoff(50)
         self.takeoff_pos = rover.position
         print('Moving under drone...')
-        # await asyncio.ensure_future(rover.goto_coordinates(Coordinate(35.7274825,-78.696275,50)))
+        if not mock:
+            await asyncio.ensure_future(rover.goto_coordinates(Coordinate(35.7274825,-78.696275,50)))
         self.start_pos = rover.position
         print(f"Start pos: {self.start_pos}")
         print('Sending callback to coordinator...')
@@ -110,12 +116,14 @@ class DQNRover(ZmqStateMachine):
         target_y = cust['y'] * 10
         print(f"Next target: {target_x}, {target_y}")
 
-        print('sleeping!')
-        await asyncio.sleep(random.uniform(0.5,5))
-        print('done sleeping!')
-        # moving = asyncio.ensure_future(rover.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
 
-        # await moving
+        if not mock:
+            moving = asyncio.ensure_future(rover.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
+            await moving
+        else:
+            print('sleeping!')
+            await asyncio.sleep(random.uniform(0.5,5))
+            print('done sleeping!')
         print('sending callback_rover_finished_step')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_finished_step')
 
