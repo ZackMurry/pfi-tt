@@ -504,10 +504,12 @@ class GroundCoordinatorRunner(ZmqStateMachine):
 
     if self.rover_idx >= len(self.actions) and self.drone_idx >= len(self.actions) and not self.requested_park:
       # Park
+      print('Park!')
       await self.transition_runner(ZMQ_DRONE, 'step')
       await self.transition_runner(ZMQ_ROVER, 'step')
       self.requested_park = True
       return "wait_for_step"
+    
 
     
     if self.rover_idx == self.drone_idx and self.rover_finished_step and self.drone_finished_step:
@@ -518,12 +520,12 @@ class GroundCoordinatorRunner(ZmqStateMachine):
 
 
     # Case: drone is out, rover finished step and is waiting for drone
-    if not dwt and self.actions[self.rover_idx] == 0 and self.rover_finished_step and self.drone_finished_step:
+    if not dwt and (self.rover_idx >= len(self.actions) or self.actions[self.rover_idx] == 0) and self.rover_finished_step and self.drone_finished_step:
       print('Rover waiting for drone, so next_waypoint_drone')
       return 'next_waypoint_drone'
 
     # Case: drone is out, rover finished step
-    if not dwt and self.actions[self.rover_idx] != 0 and self.rover_finished_step:
+    if not dwt and (self.rover_idx >= len(self.actions) or self.actions[self.rover_idx] != 0) and self.rover_finished_step:
       print('Drone is out, rover finished step')
       if self.drone_finished_step:
         return 'next_waypoint'
