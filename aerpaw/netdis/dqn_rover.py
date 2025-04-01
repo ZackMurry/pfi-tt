@@ -56,7 +56,7 @@ class DQNRover(ZmqStateMachine):
         
     @state(name="take_off")
     async def take_off(self, rover: Drone):
-        rover._mission_start_time = time.time()
+        rover._mission_start_time = time()
         print('Takeoff ordered!')
         self._takeoff_ordered = True
         return "wait_for_start"

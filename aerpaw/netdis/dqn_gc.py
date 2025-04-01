@@ -254,7 +254,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
 
     if act == 0:
       if dwt: # If drone leaving truck, just skip the action
-        print('Rover is skipping drone step')
+        print('Rover is skipping drone step at idx ', self.rover_idx)
         self.rover_finished_step = True
         await self.next_waypoint_rover(None)
         return "wait_for_step"
@@ -468,8 +468,8 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     self.rover_finished_step = True
     self.drone_finished_step = True
     self.drone_disrupted = False
-    self.rover_idx = len(revised_actions)
-    self.drone_idx = len(revised_actions)
+    self.rover_idx = len(revised_actions) - 2
+    self.drone_idx = len(revised_actions) - 2
 
     print('new idx:', self.rover_idx)
     
