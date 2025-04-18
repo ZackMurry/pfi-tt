@@ -382,6 +382,29 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     print('sending rover_next: ', rn)
     return rn
 
+  def clean_drone_dests_and_actions(self):
+    # Find indices of all zeros in self.actions
+    zero_indices = [i for i, val in enumerate(self.actions) if val == 0]
+    if len(zero_indices) < 2 * len(self.drone_dests):
+      raise ValueError("Not enough 0s in actions for each drone_dest.")
+
+    to_remove = set()
+    new_drone_dests = []
+
+    for i, dest in enumerate(self.drone_dests):
+      # Get the pair of 0s for this drone_dest
+      zero1 = zero_indices[2 * i]
+      zero2 = zero_indices[2 * i + 1]
+      if dest in self.actions:
+        # Mark those 0s for removal
+        to_remove.update([zero1, zero2])
+      else:
+        new_drone_dests.append(dest)
+
+    # Rebuild actions, skipping indices marked for removal
+    self.actions = [val for i, val in enumerate(self.actions) if i not in to_remove]
+    self.drone_dests = new_drone_dests
+
   @state(name="recover_disruption")
   async def recover_disruption(self, _):
     print('Recovering from disruption!')
@@ -470,6 +493,17 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     self.drone_disrupted = False
     self.rover_idx = len(revised_actions) - 2
     self.drone_idx = len(revised_actions) - 2
+    print('new actions', self.actions)
+    print('new drone dests', self.drone_dests)
+
+    dwt_at_end = self.drone_with_truck(len(self.actions))
+    print("dwt_at_end?", dwt_at_end)
+    if not dwt_at_end:
+      self.actions.append(0)
+    print('actions after dwt fix', self.actions)
+    self.clean_drone_dests_and_actions()
+    print('final actions', self.actions)
+    print('final drone dests', self.drone_dests)
 
     print('new idx:', self.rover_idx)
     
@@ -542,7 +576,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
       else:
         print('drone waiting, rover finished, different idx')
 
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(1)
 
     return "wait_for_step"
     
