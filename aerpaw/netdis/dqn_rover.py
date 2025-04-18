@@ -10,7 +10,7 @@ print('Starting...')
 
 ZMQ_COORDINATOR = 'COORDINATOR'
 
-mock = True
+mock = False
 
 class DQNRover(ZmqStateMachine):
 
@@ -133,7 +133,8 @@ class DQNRover(ZmqStateMachine):
     async def park(self, rover: Drone):
         print('Parking...')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_parked')
-        # await asyncio.ensure_future(rover.goto_coordinates(self.takeoff_pos))
-        # await rover.land()
+        if not mock:
+            await asyncio.ensure_future(rover.goto_coordinates(self.takeoff_pos))
+            await rover.land()
         print('Parked!')
 
