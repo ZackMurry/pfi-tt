@@ -45,7 +45,7 @@ model = Net(state_shape, action_shape)
 model.load_state_dict(torch.load("netdis_policy.pth"))
 
 
-mock = True
+mock = False
 
 class DQNDrone(ZmqStateMachine):
 
@@ -193,8 +193,9 @@ class DQNDrone(ZmqStateMachine):
     async def land(self, drone: Drone):
         print('Landing...')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_landed')
-        # await asyncio.ensure_future(drone.goto_coordinates(self.start_pos))
-        # await drone.land()
+        if not mock:
+            await asyncio.ensure_future(drone.goto_coordinates(self.start_pos))
+            await drone.land()
         print('Landed...')
     
 
