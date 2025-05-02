@@ -1,4 +1,4 @@
-from aerpawlib.runner import ZmqStateMachine, entrypoint, state, timed_state
+from aerpawlib.runner import ZmqStateMachine, entrypoint, state, timed_state, expose_field_zmq
 from aerpawlib.vehicle import Drone
 from aerpawlib.util import Coordinate, VectorNED
 import asyncio
@@ -22,6 +22,7 @@ class DQNRover(ZmqStateMachine):
         self._next_step = False
         self._dwt = True
         self.sleeps = 0
+        self.finished = True
         
         scenario_file_name = '/root/netdis.scenario'
         print(f"Reading scenario file from {scenario_file_name}...")
@@ -98,6 +99,7 @@ class DQNRover(ZmqStateMachine):
             print('Received premature step!')
             return "take_off"
         self._next_step = True
+        self.finished = False
         return "wait_for_step"
 
     @state(name="follow_route")
@@ -126,7 +128,7 @@ class DQNRover(ZmqStateMachine):
             print('done sleeping!')
         print('sending callback_rover_finished_step')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_rover_finished_step')
-
+        self.finished = True
         return "wait_for_step"
 
     @state(name="park")
@@ -137,4 +139,9 @@ class DQNRover(ZmqStateMachine):
             await asyncio.ensure_future(rover.goto_coordinates(self.takeoff_pos))
             await rover.land()
         print('Parked!')
+
+    @expose_field_zmq(name="rover_finished")
+    async def get_rover_finished(self, _):
+        print("Field queried")
+        return self.finished
 
