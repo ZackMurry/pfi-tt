@@ -23,6 +23,7 @@ from aerpawlib.util import Coordinate, Waypoint, read_from_plan_complete
 from aerpawlib.vehicle import Drone
 import torch
 from torch import nn
+import time
 import numpy as np
 from LiveNetDisEnv import LiveNetDisEnv
 from gymnasium.wrappers import FlattenObservation
@@ -93,6 +94,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     self.requested_park = False
     self.drone_disrupted = False
     self.disrupted_custs = []
+    self.last_action_time = 0
 
     print("Reading plan...")
     self.actions = []
@@ -243,6 +245,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
   async def next_waypoint_rover(self, _):
     self.rover_finished_step = False
     print('Next waypoint rover!')
+    self.last_action_time = time.time()
     self.rover_idx += 1
     if self.rover_idx >= len(self.actions):
       # Park
@@ -284,7 +287,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
   
   @state(name="next_waypoint_drone")
   async def next_waypoint_drone(self, _):
-    self.drone_finished_step = False
+    self.last_action_time = time.time()
     print('Next waypoint drone!')
 
     self.drone_idx += 1 # Advance to next state
@@ -293,7 +296,10 @@ class GroundCoordinatorRunner(ZmqStateMachine):
       # Park
       # print('sending STEP to drone')
       # await self.transition_runner(ZMQ_DRONE, 'step')
+      self.drone_idx = len(self.actions)
       return "wait_for_step"
+    
+    self.drone_finished_step = False
 
 
     dwt = self.drone_with_truck(self.drone_idx) # Is drone already with truck?
@@ -515,6 +521,26 @@ class GroundCoordinatorRunner(ZmqStateMachine):
   async def wait_for_step(self, _):
     print('Waiting for step...')
     dwt = self.drone_with_truck(self.rover_idx) # Drone is with truck before this move?
+    if self.last_action_time != 0 and time.time() - self.last_action_time > 20 and False:
+      print("Overriding finished!")
+      self.drone_finished_step = True
+      self.rover_finished_step = True
+
+    # if not self.drone_finished_step:
+    #   print('Fetching new dfs')
+    #   field_dfs = await self.query_field(ZMQ_DRONE, "drone_finished")
+    #   print('Fetched new dfs')
+    #   if field_dfs:
+    #     print('Updated DFS with field')
+    #     self.drone_finished_step = True
+    # if not self.rover_finished_step:
+    #   print('Fetching new rfs')
+    #   field_rfs = await self.query_field(ZMQ_ROVER, "rover_finished")
+    #   print('Fetched new rfs')
+    #   if field_rfs:
+    #     print('Updated RFS with field')
+    #     self.rover_finished_step = True
+
     print('dwt: ', dwt)
     print('rover_idx: ', self.rover_idx)
     print('drone_idx: ', self.drone_idx)
@@ -527,6 +553,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
       return
 
     if self.drone_disrupted:
+      self.last_action_time = time.time()
       print('Drone disrupted!')
       if self.rover_finished_step and self.drone_finished_step:
         self.drone_disrupted = False
@@ -536,19 +563,38 @@ class GroundCoordinatorRunner(ZmqStateMachine):
         await asyncio.sleep(0.5)
         return "wait_for_step"
 
-    if self.rover_idx >= len(self.actions) and self.drone_idx >= len(self.actions) and not self.requested_park:
+    # Read to park?
+    print('park?')
+    print(self.rover_finished_step and self.drone_finished_step)
+    print(self.rover_idx >= len(self.actions))
+    print(self.rover_idx == len(self.actions)- 1)
+    print(self.actions[self.rover_idx] == 0)
+    print(self.drone_idx >= len(self.actions) and not self.requested_park)
+    print(self.drone_idx >= len(self.actions))
+    print(self.drone_idx)
+    print(len(self.actions))
+    if (self.rover_finished_step and self.drone_finished_step
+      and (self.rover_idx >= len(self.actions) or (self.rover_idx == len(self.actions)- 1 and self.actions[self.rover_idx] == 0))
+      and self.drone_idx >= len(self.actions) and not self.requested_park):
       # Park
       print('Park!')
       await self.transition_runner(ZMQ_DRONE, 'step')
       await self.transition_runner(ZMQ_ROVER, 'step')
       self.requested_park = True
+      self.last_action_time = time.time()
       return "wait_for_step"
+
+    if self.requested_park:
+      await asyncio.sleep(1)
+      return "wait_for_step"
+    
     
 
     
     if self.rover_idx == self.drone_idx and self.rover_finished_step and self.drone_finished_step:
       # Simple case: drone and rover finished moving together
       print('drone and rover finished moving together')
+      self.last_action_time = time.time()
       return "next_waypoint"
     
 
@@ -556,11 +602,13 @@ class GroundCoordinatorRunner(ZmqStateMachine):
     # Case: drone is out, rover finished step and is waiting for drone
     if not dwt and (self.rover_idx >= len(self.actions) or self.actions[self.rover_idx] == 0) and self.rover_finished_step and self.drone_finished_step:
       print('Rover waiting for drone, so next_waypoint_drone')
+      self.last_action_time = time.time()
       return 'next_waypoint_drone'
 
     # Case: drone is out, rover finished step
     if not dwt and (self.rover_idx >= len(self.actions) or self.actions[self.rover_idx] != 0) and self.rover_finished_step:
       print('Drone is out, rover finished step')
+      self.last_action_time = time.time()
       if self.drone_finished_step:
         return 'next_waypoint'
       return 'next_waypoint_rover'
