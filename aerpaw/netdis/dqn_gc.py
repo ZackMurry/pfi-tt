@@ -564,20 +564,22 @@ class GroundCoordinatorRunner(ZmqStateMachine):
         return "wait_for_step"
 
     # Read to park?
-    print('park?')
-    print(self.rover_finished_step and self.drone_finished_step)
-    print(self.rover_idx >= len(self.actions))
-    print(self.rover_idx == len(self.actions)- 1)
-    print(self.actions[self.rover_idx] == 0)
-    print(self.drone_idx >= len(self.actions) and not self.requested_park)
-    print(self.drone_idx >= len(self.actions))
-    print(self.drone_idx)
-    print(len(self.actions))
-    if (self.rover_finished_step and self.drone_finished_step
+    # print('park?')
+    # print(self.rover_finished_step and self.drone_finished_step)
+    # print(self.rover_idx >= len(self.actions))
+    # print(self.rover_idx == len(self.actions)- 1)
+    # print(self.actions[self.rover_idx] == 0)
+    # print(self.drone_idx >= len(self.actions) and not self.requested_park)
+    # print(self.drone_idx >= len(self.actions))
+    # print(self.drone_idx)
+    # print(len(self.actions))
+    if (not self.requested_park and self.rover_finished_step and self.drone_finished_step
       and (self.rover_idx >= len(self.actions) or (self.rover_idx == len(self.actions)- 1 and self.actions[self.rover_idx] == 0))
-      and self.drone_idx >= len(self.actions) and not self.requested_park):
+      and self.drone_idx >= len(self.actions)):
       # Park
       print('Park!')
+      self.rover_idx = len(self.actions)
+      self.rover_idx = len(self.actions)
       await self.transition_runner(ZMQ_DRONE, 'step')
       await self.transition_runner(ZMQ_ROVER, 'step')
       self.requested_park = True
