@@ -49,7 +49,7 @@ model.load_state_dict(torch.load("netdis_policy.pth"))
 
 
 mock = False
-chandra = False
+chandra = True
 
 GRID_SIZE = 15
 
@@ -187,6 +187,7 @@ class DQNDrone(ZmqStateMachine):
             else:
                 indices = [round(i * (len(path) - 1) / (num_waypoints - 1)) for i in range(num_waypoints)]
                 sampled_points = [path[i] for i in indices]
+            sampled_points.append([14,14])
             
             print(sampled_points)
 
@@ -202,6 +203,7 @@ class DQNDrone(ZmqStateMachine):
                 self.total_move_time += time.time() - t0
                 print('Reached target!')
                 # await asyncio.sleep(3)
+            
             print('Finished Chandra points')
         else:
             dist = drone.position.ground_distance(goal)
@@ -224,8 +226,8 @@ class DQNDrone(ZmqStateMachine):
     async def land(self, drone: Drone):
         print('Landing...')
         await self.transition_runner(ZMQ_COORDINATOR, 'callback_drone_landed')
-        print(f"Total dist {self.total_dist}")
-        print(f"Total time {self.total_move_time}")
+        print(f"Move dist {self.total_dist}")
+        print(f"Move time {self.total_move_time}")
         if not mock:
             await asyncio.ensure_future(drone.goto_coordinates(self.start_pos))
             await drone.land()
