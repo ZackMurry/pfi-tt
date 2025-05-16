@@ -144,6 +144,7 @@ class DQNDrone(ZmqStateMachine):
         print(f"Next target: {target_x}, {target_y}")
         self.is_moving = True
 
+        # Assume we have a generated route from the model
 
         moving = asyncio.ensure_future(drone.goto_coordinates(self.start_pos + VectorNED(target_y, -target_x, 0)))
         await moving

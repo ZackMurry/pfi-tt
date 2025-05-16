@@ -435,7 +435,7 @@ class GroundCoordinatorRunner(ZmqStateMachine):
 
     print('Served custs: ', self.served_custs)
     state, *rest = self.env.step(-10)
-    print("Got sential step")
+    print("Got sentinel step")
     print(state)
     state_tensor = Batch(obs=[state])
     setattr(state_tensor, 'info', {})
