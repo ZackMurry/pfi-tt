@@ -185,6 +185,15 @@ class LiveScenario():
       custs.append(self.requests[idx-1])
     print('Customers in order', custs)
     return custs
+
+  # Gets served custs that appear in the list
+  def get_served_custs(self, the_list):
+    custs = []
+    for idx in the_list:
+      custs.append(self.requests[idx-1])
+    print('Served custs in order', custs)
+    return custs
+
   
   # Switch from absolute indices to served indices
   # ex for self.order = [1,3,4,5,6,9,7,8]:
@@ -198,6 +207,19 @@ class LiveScenario():
       else:
         custs.append(0)
     print('Translated', custs)
+    return custs
+
+  def untranslate_custs(self, cust_list):
+    custs = []
+    print('Untranslating cust_list', cust_list)
+    print('Order', self.order)
+    for c in cust_list:
+      if c != 0:
+        print("Finding original value for index ", c-1)
+        custs.append(self.order[c-1])
+      else:
+        custs.append(0)
+    print('Untranslated', custs)
     return custs
 
 

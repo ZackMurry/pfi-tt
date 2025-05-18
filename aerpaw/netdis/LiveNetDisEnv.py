@@ -105,8 +105,9 @@ class LiveNetDisEnv(gym.Env):
                     # print('drone')
                     if self.request['disrupted']:
                         # print(self.request)
+                        print('Persisting through disruption')
                         reward -= 10
-                        done = True
+                        # done = True
                         # done = True`
                     # else:
                     #     reward += 1
@@ -165,7 +166,8 @@ class LiveNetDisEnv(gym.Env):
                     dwt = False
                     if time + drone_time > cust['deadline']:
                         reward -= 1
-                        done = True
+                        print('Missed deadline! [drone]')
+                        #done = True
                         # break
                 else: # Send drone back
                     cust = self.customers[self.drone_route[drone_idx]-1]
@@ -180,7 +182,8 @@ class LiveNetDisEnv(gym.Env):
             cust = self.customers[dest-1]
             dt = self._get_travel_time(vx, vy, cust)
             if time + dt > cust['deadline']:
-                done = True
+                print('Missed deadline! [truck]')
+                # done = True
                 reward -= 1
                 time += dt
                 self.remaining[dest-1] = cust['deadline'] - time
@@ -192,12 +195,13 @@ class LiveNetDisEnv(gym.Env):
         
         self._update_state()
 
-        if (done or self.step_count >= self.step_limit):
+        if (done or self.step_count >= self.step_limit) and len(self.planned_route) < self.MAX_QUEUE:
             num_drone_steps = 0
             for i in range(len(self.planned_route)):
                 if self.planned_route[i] == 0:
                     num_drone_steps += 1
             if num_drone_steps % 2 == 1:
+                print('Appending 0 to route')
                 self.planned_route.append(0)
 
         # if self.draw_all and (done or self.step_count >= self.step_limit):
@@ -215,6 +219,9 @@ class LiveNetDisEnv(gym.Env):
             reward -= 3
 
         print('current route: ', self.planned_route)
+        print('returning state: ', self.state)
+        if len(self.planned_route) >= self.MAX_QUEUE:
+            done = True
         return self.state, reward, done, (self.step_count >= self.step_limit), {}
 
     def _node_dist(self, a, b):
@@ -377,10 +384,17 @@ class LiveNetDisEnv(gym.Env):
         return np.sqrt(np.power(N0[0] - N1[0], 2) + np.power(N0[1] - N1[1], 2))
             
     def step(self, action):
+        print("STEP | state")
+        print("planned_route ", self.planned_route)
+        print("drone_route ", self.drone_route)
+        print("proposed_route ", self.proposed_route)
+        print("request", self.request)
+        print("customers ", self.customers)
+        print("rejections ", self.rejections)
         if action == -10:
             print('sentinel step')
             return self.state, 0, False, False, {}
-        print(f"moving to {action}")
+        print(f"action: {action}")
         return self._STEP(action)
 
     def reset(self, seed=None, options=None):
@@ -403,15 +417,21 @@ class LiveNetDisEnv(gym.Env):
         # Need to set self.customers to the list of served customers in order
         # And also set self.planned_route and self.drone_route to reflect self.customers
     
-    def set_preset_route(self, action_list, drone_custs):
+    def set_preset_route(self, action_list, drone_custs, cur_served_custs):
         self.planned_route = self.scenario.translate_custs(action_list)
         self.drone_route = self.scenario.translate_custs(drone_custs)
         self.step_count = len(self.planned_route)
-        # todo: we need to only set the custs as the ones that are actually served at the current time
-        self.customers = self.scenario.get_served_custs()
+        # we need to only set the custs as the ones that are actually served at the current time
+        self.customers = self.scenario.get_served_custs(cur_served_custs)
         if self.request == None:
             self.request = self.scenario.request()
         return self._update_state(), {}
+
+    def get_planned_route(self):
+        return self.scenario.untranslate_custs(self.planned_route)
+    
+    def get_drone_route(self):
+        return self.scenario.untranslate_custs(self.drone_route)
 
 
 def save_log(data, name):
