@@ -81,7 +81,8 @@ class ChandraDrone(StateMachine):
                   raise ValueError(f"Cannot generate {N} unique coordinates from the available {len(all_coords)} points.")
 
               return random.sample(all_coords, N)
-            # obstacles = generate_random_coordinates(2) # still empty unless you want to map no-fly zones etc.
+            # Since we want the obstacles to be at the same positions for each drone, hardcode this list
+            # using the genobs.py file. Re-generate obstacles for every trial
             obstacles = [(12, 14), (3, 10), (12, 4), (3, 2), (0, 1), (12, 5)]
             print('obstacles', obstacles)
 
@@ -99,7 +100,7 @@ class ChandraDrone(StateMachine):
             print('samples', sampled_points)
 
             self.is_moving = True
-            for (gx, gy) in sampled_points[1:]:  # skip first (it's current position)
+            for (gx, gy) in sampled_points[1:]:  # skip first (it's the current position)
                 target = grid_to_latlon(gx, gy)
                 print(f"Moving to ({gx},{gy}) => {target}")
                 dist = drone.position.ground_distance(target)

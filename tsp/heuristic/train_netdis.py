@@ -10,6 +10,8 @@ from gymnasium.wrappers import FlattenObservation
 import numpy as np
 import matplotlib.pyplot as plt
 import tianshou as ts
+from torch.utils.tensorboard import SummaryWriter
+from tianshou.utils import TensorboardLogger
 import torch
 
 
@@ -111,6 +113,11 @@ print('Cached:   ', round(torch.cuda.memory_reserved(0)/1024**2,1), 'MB')
 train_collector = ts.data.Collector(policy, train_envs, ts.data.VectorReplayBuffer(20000, num_train_envs), exploration_noise=True)
 test_collector = ts.data.Collector(policy, test_envs, exploration_noise=True)
 
+import os
+log_path = os.path.join("dqn")
+writer = SummaryWriter(log_path)
+writer.add_text("args", "[]")
+logger = TensorboardLogger(writer)
 result = ts.trainer.OffpolicyTrainer(
     policy=policy,
     train_collector=train_collector,
@@ -121,7 +128,9 @@ result = ts.trainer.OffpolicyTrainer(
     update_per_step=0.1, episode_per_test=100, batch_size=64,
     train_fn=lambda epoch, env_step: policy.set_eps(0.1),
     test_fn=lambda epoch, env_step: policy.set_eps(0.05),
-    stop_fn=lambda mean_rewards: mean_rewards >= env.spec.reward_threshold
+    resume_from_log=True,
+    stop_fn=lambda mean_rewards: mean_rewards >= env.spec.reward_threshold,
+    logger=logger
 ).run()
 print(f'Finished training!')
 
