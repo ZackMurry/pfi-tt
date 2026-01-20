@@ -185,7 +185,7 @@ result = ts.trainer.OffpolicyTrainer(
     # test_fn=test_callback,  # Use custom test function
     test_fn=lambda epoch, env_step: policy.set_eps(0.05),
     resume_from_log=True,
-    stop_fn=lambda mean_rewards: mean_rewards >= env.spec.reward_threshold,
+    stop_fn=lambda mean_rewards: mean_rewards >= 1000,
     logger=logger
 ).run()
 print(f'Finished training!')
