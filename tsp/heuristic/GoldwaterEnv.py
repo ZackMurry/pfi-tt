@@ -616,6 +616,10 @@ class GoldwaterEnv(gym.Env):
                     reward += 25
                 elif time_ratio < 1.5:  # >20% slower
                     reward += 20
+                elif time_ratio < 2:
+                    reward += 10
+                elif time_ratio < 3:
+                    reward += 5
             
             done = True
         
