@@ -84,13 +84,6 @@ class GoldwaterEnv(gym.Env):
         """Calculate Manhattan distance between two points"""
         return abs(x2 - x1) + abs(y2 - y1)
     
-    def _get_travel_time(self, x, y, customer, is_drone=False):
-        """Get travel time to customer"""
-        dist = self._manhattan_distance(x, y, customer['x'], customer['y'])
-        if is_drone:
-            return dist / self.DRONE_SPEED_FACTOR
-        return dist
-    
     def _generate_customers(self):
         """Generate randomized customer locations and deadlines with controlled difficulty"""
         customers = []

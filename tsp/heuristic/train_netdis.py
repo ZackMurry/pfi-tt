@@ -121,9 +121,9 @@ policy = ts.policy.DQNPolicy(
     model=net,
     optim=optim,
     action_space=env.action_space,
-    discount_factor=0.99,
-    estimation_step=3,
-    target_update_freq=500,
+    discount_factor=0.95,
+    estimation_step=2,
+    target_update_freq=1000
 ).to(device)
 
 # print(torch.cuda.get_device_name(0))
@@ -191,7 +191,7 @@ result = ts.trainer.OffpolicyTrainer(
     step_per_epoch=5000,
     episode_per_test=20,  # Faster testing
     # episode_per_test=100, 
-    update_per_step=0.1, batch_size=64,
+    update_per_step=0.1, batch_size=128,
     train_fn=train_callback,
     # test_fn=test_callback,  # Use custom test function
     test_fn=lambda epoch, env_step: policy.set_eps(0.05),
