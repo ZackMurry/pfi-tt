@@ -236,9 +236,11 @@ if __name__ == "__main__":
     # ==================== EVALUATE BASELINE ====================
     print("Evaluating Nearest-Neighbor Baseline...")
     baseline_policy = NearestNeighborPolicy(env)
+    print('Created NearestNeighborPolicy')
     baseline_results, baseline_metrics = evaluate_policy(
         baseline_policy, env, num_episodes=100, policy_name="Nearest-Neighbor Baseline"
     )
+    print('Printing results')
     print_results(baseline_results)
     
     # ==================== EVALUATE RL POLICY ====================

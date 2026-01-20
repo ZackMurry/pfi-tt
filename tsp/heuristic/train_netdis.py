@@ -104,7 +104,7 @@ print(f"Using device: {device}")
 
 # 2. Move the network to GPU
 net = Net(state_shape, action_shape)
-net = net.to(device)  # ADD THIS LINE
+net = net.to(device)
 
 # 3. Verify it's on GPU
 print(f"Model on GPU: {next(net.parameters()).is_cuda}")

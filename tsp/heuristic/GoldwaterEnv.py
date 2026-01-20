@@ -12,7 +12,7 @@ class GoldwaterEnv(gym.Env):
     RoutePEARL environment for training RL agents on network-aware
     truck-drone delivery route planning.
     """
-    def __init__(self, num_customers=12, *args, **kwargs):
+    def __init__(self, num_customers=12, use_warm_start=True, test_mode=False, test_scenarios=None, *args, **kwargs):
         # Configuration
         self.NUM_CUSTOMERS = num_customers
         self.DRONE_SPEED_FACTOR = 1.5  # Drones are faster than trucks
@@ -20,6 +20,12 @@ class GoldwaterEnv(gym.Env):
         self.MAX_X = 20
         self.MAX_Y = 20
         self.DISRUPTION_PROB = 0.2  # 20% of customers have network disruptions
+        self.use_warm_start = use_warm_start  # Whether to use heuristic initialization
+        
+        # Test mode: use fixed scenarios
+        self.test_mode = test_mode
+        self.test_scenarios = test_scenarios  # List of pre-generated scenarios
+        self.test_scenario_idx = 0
         
         # Episode tracking
         self.episodes = 0
@@ -32,6 +38,10 @@ class GoldwaterEnv(gym.Env):
         self.drone_route = []
         self.rejected = []
         self.drone_with_truck = True
+        
+        # Warm start state
+        self.initial_plan = None  # Store the original heuristic plan
+        self.disruptions_encountered = []  # Track which disruptions we've seen
         
         # Position tracking
         self.depot = {"x": 0, "y": 0}
@@ -69,6 +79,17 @@ class GoldwaterEnv(gym.Env):
         
         self.reset()
     
+    def _manhattan_distance(self, x1, y1, x2, y2):
+        """Calculate Manhattan distance between two points"""
+        return abs(x2 - x1) + abs(y2 - y1)
+    
+    def _get_travel_time(self, x, y, customer, is_drone=False):
+        """Get travel time to customer"""
+        dist = self._manhattan_distance(x, y, customer['x'], customer['y'])
+        if is_drone:
+            return dist / self.DRONE_SPEED_FACTOR
+        return dist
+    
     def _generate_customers(self):
         """Generate randomized customer locations and deadlines with controlled difficulty"""
         customers = []
@@ -90,7 +111,7 @@ class GoldwaterEnv(gym.Env):
                 # Deadline: guaranteed feasible + buffer
                 min_time = self._manhattan_distance(0, 0, x, y)
                 # Add buffer: 2x-3x the minimum time to ensure feasibility
-                deadline = int(min_time * np.random.uniform(2.0, 3.5))
+                deadline = int(min_time * np.random.uniform(3.0, 5.5))
                 
                 # Controlled disruption probability
                 disrupted = 1 if np.random.random() < self.DISRUPTION_PROB else 0
@@ -229,7 +250,302 @@ class GoldwaterEnv(gym.Env):
         
         return time
     
-    def _manhattan_distance(self, x1, y1, x2, y2):
+    def _simulate_schedule(self):
+        """
+        Replays current planned_route and drone_route and returns:
+        valid: bool
+        makespan: float
+        tardiness: float  (sum max(0, arrival - deadline) over served customers)
+        """
+        time = 0.0
+        x, y = 0, 0
+        tardiness = 0.0
+
+        drone_with_truck = True
+        drone_idx = 0
+        drone_leg_time = 0.0
+        drone_start_time = 0.0
+
+        for dest in self.planned_route:
+            if dest == 0:
+                # Drone event toggles between "launch for current drone_idx" and "recover for current drone_idx"
+                if drone_with_truck:
+                    if drone_idx >= len(self.drone_route):
+                        return False, 1e9, 1e9
+                    cust_idx = self.drone_route[drone_idx] - 1
+                    if cust_idx < 0 or cust_idx >= len(self.customers):
+                        return False, 1e9, 1e9
+                    cust = self.customers[cust_idx]
+
+                    # Outbound leg from current truck position
+                    drone_leg_time = float(self._get_travel_time(x, y, cust, is_drone=True))
+                    drone_start_time = time
+
+                    # Arrival time at customer (drone)
+                    drone_arrival = drone_start_time + drone_leg_time
+                    tardiness += max(0.0, drone_arrival - cust["deadline"])
+
+                    drone_with_truck = False
+                else:
+                    # Recover drone: assume it returns from same customer to current truck position
+                    cust_idx = self.drone_route[drone_idx] - 1
+                    if cust_idx < 0 or cust_idx >= len(self.customers):
+                        return False, 1e9, 1e9
+                    cust = self.customers[cust_idx]
+
+                    return_leg = float(self._get_travel_time(x, y, cust, is_drone=True))
+                    total_drone = drone_leg_time + return_leg
+
+                    elapsed_truck = time - drone_start_time
+                    wait = max(0.0, total_drone - elapsed_truck)
+                    time += wait
+
+                    drone_idx += 1
+                    drone_with_truck = True
+                continue
+
+            # Truck delivery
+            if dest <= 0 or dest > len(self.customers):
+                return False, 1e9, 1e9
+            cust = self.customers[dest - 1]
+            time += float(self._get_travel_time(x, y, cust, is_drone=False))
+            tardiness += max(0.0, time - cust["deadline"])
+            x, y = cust["x"], cust["y"]
+
+        makespan = time
+        return True, makespan, tardiness
+    
+    def _get_customer_position(self, customer_idx):
+        """Get (x, y) position of a customer by index"""
+        if customer_idx < 0 or customer_idx >= len(self.all_customers):
+            return 0, 0  # Depot
+        cust = self.all_customers[customer_idx]
+        return cust['x'], cust['y']
+    
+    def _build_nearest_neighbor_route(self):
+        """
+        Build truck route using nearest-neighbor algorithm.
+        Returns: (truck_route, rejected_customers)
+        """
+        truck_route = []
+        remaining = set(range(len(self.all_customers)))
+        
+        current_x, current_y = 0, 0
+        current_time = 0
+        
+        while remaining:
+            # Find nearest feasible customer
+            best_idx = None
+            best_dist = float('inf')
+            
+            for idx in remaining:
+                cust = self.all_customers[idx]
+                dist = self._manhattan_distance(current_x, current_y, cust['x'], cust['y'])
+                arrival_time = current_time + dist
+                
+                # Feasible if we can arrive before deadline
+                if arrival_time <= cust['deadline'] and dist < best_dist:
+                    best_idx = idx
+                    best_dist = dist
+            
+            if best_idx is None:
+                break  # No more feasible customers
+            
+            truck_route.append(best_idx)
+            remaining.remove(best_idx)
+            
+            current_x, current_y = self._get_customer_position(best_idx)
+            current_time += best_dist
+        
+        return truck_route, list(remaining)
+    
+    def _calculate_route_makespan(self, truck_route, drone_sorties=None):
+        """
+        Calculate makespan for a given route configuration.
+        
+        Args:
+            truck_route: List of customer indices for truck
+            drone_sorties: List of (launch_idx, customer_idx, land_idx) tuples
+                          or None for truck-only route
+        
+        Returns:
+            Total makespan (time to complete all deliveries)
+        """
+        if drone_sorties is None:
+            drone_sorties = []
+        
+        # Remove drone customers from truck route
+        drone_customers = {sortie[1] for sortie in drone_sorties}
+        truck_only = [idx for idx in truck_route if idx not in drone_customers]
+        
+        if not truck_only and not drone_sorties:
+            return 0
+        
+        time = 0
+        x, y = 0, 0
+        
+        # Create mapping of truck position -> sorties to launch
+        sorties_by_launch = {}
+        for sortie in drone_sorties:
+            launch_idx = sortie[0]
+            if launch_idx not in sorties_by_launch:
+                sorties_by_launch[launch_idx] = []
+            sorties_by_launch[launch_idx].append(sortie)
+        
+        # Track active drones: {sortie: completion_time}
+        active_drones = {}
+        
+        # Simulate truck route
+        for truck_idx, cust_idx in enumerate(truck_only):
+            # Move truck to customer
+            cust_x, cust_y = self._get_customer_position(cust_idx)
+            time += self._manhattan_distance(x, y, cust_x, cust_y)
+            x, y = cust_x, cust_y
+            
+            # Launch any drones scheduled at this position
+            if truck_idx in sorties_by_launch:
+                for sortie in sorties_by_launch[truck_idx]:
+                    launch_idx, drone_cust_idx, land_idx = sortie
+                    
+                    # Calculate drone trip time
+                    drone_cust_x, drone_cust_y = self._get_customer_position(drone_cust_idx)
+                    
+                    # Outbound: current position -> drone customer
+                    drone_out = self._manhattan_distance(x, y, drone_cust_x, drone_cust_y) / self.DRONE_SPEED_FACTOR
+                    
+                    # Return: drone customer -> landing position
+                    if land_idx >= len(truck_only):
+                        land_x, land_y = self._get_customer_position(truck_only[-1]) if truck_only else (x, y)
+                    else:
+                        land_x, land_y = self._get_customer_position(truck_only[land_idx])
+                    
+                    drone_back = self._manhattan_distance(drone_cust_x, drone_cust_y, land_x, land_y) / self.DRONE_SPEED_FACTOR
+                    
+                    drone_completion = time + drone_out + drone_back
+                    active_drones[sortie] = drone_completion
+            
+            # Wait for any drones landing at this position
+            drones_to_remove = []
+            for sortie, completion_time in active_drones.items():
+                if sortie[2] == truck_idx:  # Drone lands here
+                    time = max(time, completion_time)
+                    drones_to_remove.append(sortie)
+            
+            for sortie in drones_to_remove:
+                del active_drones[sortie]
+        
+        # Wait for any remaining drones
+        if active_drones:
+            time = max(time, max(active_drones.values()))
+        
+        return time
+    
+    def _is_sortie_feasible(self, truck_route, launch_idx, customer_idx, land_idx):
+        """Check if a drone sortie is feasible"""
+        if launch_idx >= land_idx or land_idx > len(truck_route):
+            return False
+        
+        # Get positions
+        launch_x, launch_y = self._get_customer_position(truck_route[launch_idx - 1]) if launch_idx > 0 else (0, 0)
+        land_x, land_y = self._get_customer_position(truck_route[land_idx - 1]) if land_idx <= len(truck_route) else self._get_customer_position(truck_route[-1])
+        drone_x, drone_y = self._get_customer_position(customer_idx)
+        
+        # Calculate times
+        drone_time = (self._manhattan_distance(launch_x, launch_y, drone_x, drone_y) +
+                     self._manhattan_distance(drone_x, drone_y, land_x, land_y)) / self.DRONE_SPEED_FACTOR
+        
+        # Calculate truck time for this segment
+        truck_time = 0
+        pos_x, pos_y = launch_x, launch_y
+        for i in range(launch_idx, min(land_idx, len(truck_route))):
+            next_x, next_y = self._get_customer_position(truck_route[i])
+            truck_time += self._manhattan_distance(pos_x, pos_y, next_x, next_y)
+            pos_x, pos_y = next_x, next_y
+        
+        # Feasible if drone completes before or shortly after truck arrives
+        return drone_time <= truck_time + 10
+    
+    def _generate_heuristic_route(self):
+        """
+        Generate baseline route using nearest-neighbor heuristic.
+        Uses truck only (no drones) to provide a simple, strong baseline.
+        
+        Algorithm:
+        1. Start at depot
+        2. Repeatedly visit nearest feasible customer
+        3. Reject customers that cannot be reached on time
+        
+        Returns: (truck_route, drone_assignments, rejected_customers)
+        """
+        truck_route, rejected = self._build_nearest_neighbor_route()
+        drone_assignments = []  # Heuristic doesn't use drones
+        
+        return truck_route, drone_assignments, rejected
+    
+    def _initialize_from_heuristic(self):
+        """
+        Initialize the episode with a heuristic plan.
+        This represents the original route plan before disruptions were known.
+        Builds planned_route where drone serves customers in parallel with truck.
+        """
+        truck_route, drone_assignments, rejected = self._generate_heuristic_route()
+        
+        # Store the initial plan for reference
+        self.initial_plan = {
+            'truck_route': truck_route.copy(),
+            'drone_assignments': drone_assignments.copy(),
+            'rejected': rejected.copy()
+        }
+        
+        # Build planned_route with proper drone scheduling
+        # Drone launches at one truck stop, serves customer, returns to later truck stop
+        self.planned_route = []
+        self.drone_route = []
+        
+        # Simple approach: interleave drone deliveries with truck stops
+        # For each drone customer, insert: send drone (0), then later collect drone (0)
+        
+        truck_idx = 0
+        drone_idx = 0
+        
+        # Add first few truck customers
+        customers_before_first_drone = min(2, len(truck_route))
+        for i in range(customers_before_first_drone):
+            self.planned_route.append(truck_route[i] + 1)  # 1-indexed
+            truck_idx += 1
+        
+        # Insert drone deliveries strategically
+        while drone_idx < len(drone_assignments) and truck_idx < len(truck_route):
+            # Launch drone
+            self.planned_route.append(0)
+            self.drone_route.append(drone_assignments[drone_idx] + 1)  # 1-indexed
+            
+            # Truck serves next 2-3 customers while drone is out
+            customers_while_drone_out = min(2, len(truck_route) - truck_idx)
+            for i in range(customers_while_drone_out):
+                self.planned_route.append(truck_route[truck_idx] + 1)
+                truck_idx += 1
+            
+            # Collect drone
+            self.planned_route.append(0)
+            
+            drone_idx += 1
+        
+        # Add remaining truck customers
+        while truck_idx < len(truck_route):
+            self.planned_route.append(truck_route[truck_idx] + 1)
+            truck_idx += 1
+        
+        # Add all customers to self.customers
+        all_assigned = set(truck_route + drone_assignments)
+        for idx in sorted(all_assigned):
+            self.customers.append(self.all_customers[idx])
+        
+        # Rejected customers
+        for idx in rejected:
+            self.rejected.append(self.all_customers[idx])
+        
+        return truck_route, drone_assignments, rejected
         """Calculate Manhattan distance between two points"""
         return abs(x2 - x1) + abs(y2 - y1)
     
@@ -468,8 +784,14 @@ class GoldwaterEnv(gym.Env):
         self.step_count = 0
         self.request_idx = 0
         
-        # Generate new customers
-        self.all_customers = self._generate_customers()
+        # Generate new customers (or use test scenario)
+        if self.test_mode and self.test_scenarios:
+            # Use fixed test scenario, cycle through them
+            self.all_customers = self.test_scenarios[self.test_scenario_idx % len(self.test_scenarios)]
+            self.test_scenario_idx += 1
+        else:
+            # Generate random customers for training
+            self.all_customers = self._generate_customers()
         
         # Reset state
         self.customers = []
@@ -479,6 +801,7 @@ class GoldwaterEnv(gym.Env):
         self.drone_with_truck = True
         self.truck_x = 0
         self.truck_y = 0
+        self.disruptions_encountered = []
         
         # Reset metrics
         self.customers_served = 0
@@ -489,65 +812,209 @@ class GoldwaterEnv(gym.Env):
         # Calculate scenario difficulty for normalization
         self.scenario_difficulty = self._calculate_scenario_difficulty()
         
+        # WARM START: Initialize with heuristic route
+        if self.use_warm_start:
+            self._initialize_from_heuristic()
+            # Now RL will process each customer sequentially and can modify the plan
+            # Reset to process from scratch
+            self.customers = []
+            self.planned_route = []
+            self.drone_route = []
+            self.rejected = []
+            self.drone_with_truck = True
+        else:
+            self.initial_plan = None
+        
         self._update_state()
         
         return self.state, {"action_mask": self._get_action_mask()}
     
+    @staticmethod
+    def generate_test_scenarios(num_scenarios=25, num_customers=12, seed=42):
+        """
+        Generate a fixed set of test scenarios for consistent evaluation.
+        
+        Args:
+            num_scenarios: Number of test scenarios to generate
+            num_customers: Customers per scenario
+            seed: Random seed for reproducibility
+            
+        Returns:
+            List of customer lists (scenarios)
+        """
+        np.random.seed(seed)
+        scenarios = []
+        
+        # Create environment temporarily to use its generation logic
+        temp_env = GoldwaterEnv(num_customers=num_customers, test_mode=False)
+        
+        for i in range(num_scenarios):
+            # Use different seed for each scenario
+            np.random.seed(seed + i)
+            customers = temp_env._generate_customers()
+            scenarios.append(customers)
+        
+        return scenarios
+    
+    @staticmethod
+    def save_test_scenarios(scenarios, filename='test_scenarios.npy'):
+        """Save test scenarios to file"""
+        import pickle
+        with open(filename, 'wb') as f:
+            pickle.dump(scenarios, f)
+        print(f"Saved {len(scenarios)} test scenarios to {filename}")
+    
+    @staticmethod
+    def load_test_scenarios(filename='test_scenarios.npy'):
+        """Load test scenarios from file"""
+        import pickle
+        with open(filename, 'rb') as f:
+            scenarios = pickle.load(f)
+        print(f"Loaded {len(scenarios)} test scenarios from {filename}")
+        return scenarios
+    
     def render(self, save_path=None):
-        """Visualize the current route"""
-        fig, ax = plt.subplots(figsize=(10, 10))
+        """Visualize the current route and compare to heuristic baseline"""
+        fig, ax = plt.subplots(figsize=(12, 10))
         
         ax.set_xlim([0, self.MAX_X])
         ax.set_ylim([0, self.MAX_Y])
-        ax.set_xlabel('X Position')
-        ax.set_ylabel('Y Position')
-        ax.set_title(f'Episode {self.episodes}: {self.customers_served}/{self.NUM_CUSTOMERS} served, {self.late_deliveries} late')
+        ax.set_xlabel('X Position', fontsize=12)
+        ax.set_ylabel('Y Position', fontsize=12)
+        
+        # Calculate final metrics
+        final_valid, final_makespan, final_tardiness = self._simulate_schedule()
+        title = f'Episode {self.episodes}: {len(self.customers)}/{self.NUM_CUSTOMERS} served'
+        if self.initial_plan:
+            initial_served = len(self.initial_plan['truck_route']) + len(self.initial_plan['drone_assignments'])
+            improvement = len(self.customers) - initial_served
+            title += f' (Heuristic: {initial_served}, Δ={improvement:+d})'
+        ax.set_title(title, fontsize=14, fontweight='bold')
         ax.grid(True, alpha=0.3)
         
         # Draw depot
-        ax.scatter(0, 0, color='green', s=400, marker='s', label='Depot', zorder=5)
+        ax.scatter(0, 0, color='green', s=500, marker='s', label='Depot', zorder=5, edgecolors='black', linewidths=2)
         
-        # Draw customers
-        for i, cust in enumerate(self.customers):
-            color = 'red' if cust['disrupted'] else 'blue'
-            marker = 's' if cust['disrupted'] else 'o'
-            ax.scatter(cust['x'], cust['y'], color=color, s=200, marker=marker, zorder=4)
-            ax.annotate(f"{i+1}\nd={cust['deadline']}", 
-                       xy=(cust['x'], cust['y']), 
-                       xytext=(5, 5), 
-                       textcoords='offset points',
-                       fontsize=8)
+        # Draw heuristic route (if available) - in light gray/dashed
+        if self.initial_plan:
+            heuristic_x, heuristic_y = 0, 0
+            
+            # Draw heuristic truck route
+            for cust_idx in self.initial_plan['truck_route']:
+                cust = self.all_customers[cust_idx]
+                ax.plot([heuristic_x, cust['x']], [heuristic_y, cust['y']], 
+                       color='gray', linestyle='--', linewidth=1.5, alpha=0.5, 
+                       label='Heuristic Route' if heuristic_x == 0 and heuristic_y == 0 else '')
+                heuristic_x, heuristic_y = cust['x'], cust['y']
+            
+            # Draw heuristic drone assignments
+            for cust_idx in self.initial_plan['drone_assignments']:
+                cust = self.all_customers[cust_idx]
+                ax.plot([0, cust['x']], [0, cust['y']], 
+                       color='lightcoral', linestyle=':', linewidth=1.5, alpha=0.5,
+                       label='Heuristic Drone' if cust_idx == self.initial_plan['drone_assignments'][0] else '')
         
-        # Draw rejected customers
-        for rej in self.rejected:
-            ax.scatter(rej['x'], rej['y'], color='gray', s=100, marker='x', zorder=3)
+        # Draw all customers (including rejected)
+        for i, cust in enumerate(self.all_customers):
+            if cust in self.rejected:
+                # Rejected customers - gray X
+                ax.scatter(cust['x'], cust['y'], color='gray', s=150, marker='x', 
+                          zorder=3, linewidths=3)
+                ax.annotate(f"REJ", xy=(cust['x'], cust['y']), 
+                           xytext=(5, 5), textcoords='offset points',
+                           fontsize=7, color='gray', style='italic')
+            elif cust in self.customers:
+                # Served customers
+                color = 'red' if cust['disrupted'] else 'blue'
+                marker = 's' if cust['disrupted'] else 'o'
+                ax.scatter(cust['x'], cust['y'], color=color, s=250, marker=marker, 
+                          zorder=4, edgecolors='black', linewidths=1.5,
+                          label='Disrupted' if cust['disrupted'] and i == 0 else ('Normal' if not cust['disrupted'] and i == 0 else ''))
+                
+                # Find this customer's index in self.customers
+                cust_num = self.customers.index(cust) + 1
+                ax.annotate(f"{cust_num}\nd={cust['deadline']}", 
+                           xy=(cust['x'], cust['y']), 
+                           xytext=(5, 5), 
+                           textcoords='offset points',
+                           fontsize=8, fontweight='bold')
+            else:
+                # Not processed yet (shouldn't happen in final render)
+                ax.scatter(cust['x'], cust['y'], color='lightgray', s=100, marker='o', 
+                          zorder=2, alpha=0.5)
         
-        # Draw truck route
+        # Draw RL truck route (solid blue line)
         truck_x, truck_y = 0, 0
+        truck_positions = [(0, 0)]
         for dest in self.planned_route:
-            if dest != 0:
+            if dest != 0 and dest <= len(self.customers):
                 cust = self.customers[dest - 1]
-                ax.plot([truck_x, cust['x']], [truck_y, cust['y']], 
-                       'b-', linewidth=2, alpha=0.6)
-                truck_x, truck_y = cust['x'], cust['y']
+                truck_positions.append((cust['x'], cust['y']))
         
-        # Draw drone routes
+        if len(truck_positions) > 1:
+            for i in range(len(truck_positions) - 1):
+                ax.plot([truck_positions[i][0], truck_positions[i+1][0]], 
+                       [truck_positions[i][1], truck_positions[i+1][1]], 
+                       'b-', linewidth=3, alpha=0.8,
+                       label='RL Truck Route' if i == 0 else '')
+        
+        # Draw RL drone routes (solid red dashed line)
         drone_idx = 0
         truck_x, truck_y = 0, 0
+        drone_with_truck = True
+        
         for dest in self.planned_route:
-            if dest == 0 and drone_idx < len(self.drone_route):
-                cust = self.customers[self.drone_route[drone_idx] - 1]
-                ax.plot([truck_x, cust['x']], [truck_y, cust['y']], 
-                       'r--', linewidth=2, alpha=0.6, label='Drone' if drone_idx == 0 else '')
-                drone_idx += 1
-            elif dest != 0:
+            if dest == 0:  # Drone action
+                if drone_with_truck and drone_idx < len(self.drone_route):
+                    # Send drone
+                    cust = self.customers[self.drone_route[drone_idx] - 1]
+                    ax.plot([truck_x, cust['x']], [truck_y, cust['y']], 
+                           'r--', linewidth=3, alpha=0.8,
+                           label='RL Drone Route' if drone_idx == 0 else '')
+                    # Add arrow to show direction
+                    dx = cust['x'] - truck_x
+                    dy = cust['y'] - truck_y
+                    ax.arrow(truck_x + 0.3*dx, truck_y + 0.3*dy, 
+                            0.3*dx, 0.3*dy,
+                            head_width=0.5, head_length=0.5, 
+                            fc='red', ec='red', alpha=0.6)
+                elif not drone_with_truck and drone_idx < len(self.drone_route):
+                    # Collect drone
+                    cust = self.customers[self.drone_route[drone_idx] - 1]
+                    ax.plot([truck_x, cust['x']], [truck_y, cust['y']], 
+                           'r:', linewidth=2, alpha=0.6)  # Return path (dotted)
+                    drone_idx += 1
+                drone_with_truck = not drone_with_truck
+            elif dest > 0 and dest <= len(self.customers):
                 cust = self.customers[dest - 1]
                 truck_x, truck_y = cust['x'], cust['y']
         
-        ax.legend()
+        # Add legend
+        ax.legend(loc='upper right', fontsize=10, framealpha=0.9)
+        
+        # Add text box with statistics
+        stats_text = f"RL Performance:\n"
+        stats_text += f"  Served: {len(self.customers)}/{self.NUM_CUSTOMERS}\n"
+        stats_text += f"  Rejected: {len(self.rejected)}\n"
+        stats_text += f"  Drone Uses: {len(self.drone_route)}\n"
+        if final_valid:
+            stats_text += f"  Makespan: {final_makespan:.1f}\n"
+            stats_text += f"  Tardiness: {final_tardiness:.1f}"
+        
+        if self.initial_plan:
+            stats_text += f"\n\nHeuristic Baseline:\n"
+            stats_text += f"  Served: {initial_served}/{self.NUM_CUSTOMERS}\n"
+            stats_text += f"  Rejected: {len(self.initial_plan['rejected'])}\n"
+            stats_text += f"  Drone Uses: {len(self.initial_plan['drone_assignments'])}"
+        
+        ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
+               fontsize=9, verticalalignment='top',
+               bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        
+        plt.tight_layout()
         
         if save_path:
-            fig.savefig(save_path)
+            fig.savefig(save_path, dpi=150, bbox_inches='tight')
             plt.close(fig)
         else:
             plt.show()
