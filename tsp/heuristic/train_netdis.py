@@ -106,7 +106,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # 2. Move the network to GPU
-net = Net(state_shape, action_shape)
+net = Net(state_shape, action_shape, device)
 net = net.to(device)
 
 # 3. Verify it's on GPU
