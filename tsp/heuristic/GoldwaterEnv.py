@@ -7,6 +7,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from math import pow, sqrt
 
+# todo: make sure drone returns before ending
 class GoldwaterEnv(gym.Env):
     """
     RoutePEARL environment for training RL agents on network-aware
@@ -111,7 +112,7 @@ class GoldwaterEnv(gym.Env):
                 # Deadline: guaranteed feasible + buffer
                 min_time = self._manhattan_distance(0, 0, x, y)
                 # Add buffer: 2x-3x the minimum time to ensure feasibility
-                deadline = int(min_time * np.random.uniform(3.0, 5.5))
+                deadline = int(min_time * np.random.uniform(2.0, 4.5))
                 
                 # Controlled disruption probability
                 disrupted = 1 if np.random.random() < self.DISRUPTION_PROB else 0
@@ -128,7 +129,7 @@ class GoldwaterEnv(gym.Env):
             x = np.random.randint(2, self.MAX_X - 2)
             y = np.random.randint(2, self.MAX_Y - 2)
             min_time = self._manhattan_distance(0, 0, x, y)
-            deadline = int(min_time * np.random.uniform(3.0, 5.5))
+            deadline = 5 + int(min_time * np.random.uniform(2.0, 4.5))
             disrupted = 1 if np.random.random() < self.DISRUPTION_PROB else 0
             
             customers.append({
@@ -982,7 +983,7 @@ class GoldwaterEnv(gym.Env):
                     # Collect drone
                     cust = self.customers[self.drone_route[drone_idx] - 1]
                     ax.plot([truck_x, cust['x']], [truck_y, cust['y']], 
-                           'r:', linewidth=2, alpha=0.6)  # Return path (dotted)
+                           'g:', linewidth=2, alpha=0.6)  # Return path (dotted)
                     drone_idx += 1
                 drone_with_truck = not drone_with_truck
             elif dest > 0 and dest <= len(self.customers):
