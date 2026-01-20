@@ -59,8 +59,9 @@ import torch, numpy as np
 from torch import nn
 
 class Net(nn.Module):
-    def __init__(self, state_shape, action_shape):
+    def __init__(self, state_shape, action_shape, device):
         super().__init__()
+        self.device = device
         input_dim = np.prod(state_shape)
         
         self.model = nn.Sequential(
@@ -84,7 +85,9 @@ class Net(nn.Module):
 
     def forward(self, obs, state=None, info={}):
         if not isinstance(obs, torch.Tensor):
-            obs = torch.tensor(obs, dtype=torch.float)
+            obs = torch.tensor(obs, dtype=torch.float, device=self.device)
+        else:
+            obs = obs.to(self.device)
         batch = obs.shape[0]
         logits = self.model(obs.view(batch, -1))
         return logits, state
