@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import numpy as np
 from LiveNetDisEnv import LiveNetDisEnv
+from GoldwaterEnv import GoldwaterEnv
 from gymnasium.wrappers import FlattenObservation
 import gymnasium as gym
 import tianshou as ts
@@ -12,40 +13,52 @@ gym.envs.register(
     #  id='SimpleHeuristicTSPEnv-v0',
     #  entry_point=SimpleHeuristicTSPEnv,
      id='NetworkDisruptionEnv-v0',
-     entry_point=LiveNetDisEnv,
+    #  entry_point=LiveNetDisEnv,
+    entry_point=GoldwaterEnv,
     # id='HeuristicTSPEnv-v0',
     # entry_point=HeuristicTSPEnv,
     max_episode_steps=50,
     kwargs={}
 )
 
-class Net(torch.nn.Module):
+class Net(nn.Module):
     def __init__(self, state_shape, action_shape):
         super().__init__()
+        input_dim = np.prod(state_shape)
+        
         self.model = nn.Sequential(
-            nn.Linear(np.prod(state_shape), 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True), # new
-            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
-            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
-            nn.Linear(128, np.prod(action_shape))#, device=device),
+            # Wider first layer to capture input complexity
+            nn.Linear(input_dim, 256), 
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),  # Light regularization
+            
+            # Maintain capacity
+            nn.Linear(256, 256), 
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            
+            # Funnel down
+            nn.Linear(256, 128), 
+            nn.ReLU(inplace=True),
+            
+            # Output layer
+            nn.Linear(128, np.prod(action_shape))
         )
 
     def forward(self, obs, state=None, info={}):
         if not isinstance(obs, torch.Tensor):
-            obs = torch.tensor(obs, dtype=torch.float)#, device=device)
+            obs = torch.tensor(obs, dtype=torch.float)
         batch = obs.shape[0]
         logits = self.model(obs.view(batch, -1))
-        # print(f"logits: {logits}")
         return logits, state
+
+env = FlattenObservation(GoldwaterEnv())
 
 
 print('Starting...')
 
 ZMQ_COORDINATOR = 'COORDINATOR'
 
-env = Flat^tenObservation(LiveNetDisEnv())
 env.draw_all = True
 state_shape = env.observation_space.shape or env.observation_space.n
 print(f'State shape: {state_shape}')
@@ -54,30 +67,9 @@ print(f"action shape: {action_shape}")
 
 model = Net(state_shape, action_shape)
 # model.load_state_dict(torch.load("good_netdis_policy.pth"))
-model.load_state_dict(torch.load("netdis_policy_5.pth"))
+model.load_state_dict(torch.load("netdis_policy.pth"))
 
 print('Loaded model!')
-
-class Net(nn.Module):
-    def __init__(self, state_shape, action_shape):
-        super().__init__()
-        self.model = nn.Sequential(
-            nn.Linear(np.prod(state_shape), 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True), # new
-            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
-            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
-            nn.Linear(128, np.prod(action_shape))#, device=device),
-        )
-
-    def forward(self, obs, state=None, info={}):
-        if not isinstance(obs, torch.Tensor):
-            obs = torch.tensor(obs, dtype=torch.float)#, device=device)
-        batch = obs.shape[0]
-        logits = self.model(obs.view(batch, -1))
-        # print(f"logits: {logits}")
-        return logits, state
 
 optim = torch.optim.Adam(model.parameters(), lr=1e-3)
 policy = ts.policy.DQNPolicy(

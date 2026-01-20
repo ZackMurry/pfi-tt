@@ -2,6 +2,7 @@
 # from or_gym.utils import create_env
 #from SimpleHeuristicTSPEnv import SimpleHeuristicTSPEnv, save_logs
 # from HeuristicTSPEnv import HeuristicTSPEnv, save_logs
+from GoldwaterEnv import GoldwaterEnv
 from NetworkDisruptionEnv import NetworkDisruptionEnv, save_logs
 # from LiveNetDisEnv import LiveNetDisEnv, save_logs
 from DisruptedScenario import DisruptedScenario
@@ -25,7 +26,8 @@ gym.envs.register(
     #  entry_point=SimpleHeuristicTSPEnv,
      id='NetworkDisruptionEnv-v0',
     #  entry_point=LiveNetDisEnv,
-    entry_point=NetworkDisruptionEnv,
+    # entry_point=NetworkDisruptionEnv,
+    entry_point=GoldwaterEnv,
     # id='HeuristicTSPEnv-v0',
     # entry_point=HeuristicTSPEnv,
     max_episode_steps=50,
@@ -59,25 +61,35 @@ from torch import nn
 class Net(nn.Module):
     def __init__(self, state_shape, action_shape):
         super().__init__()
+        input_dim = np.prod(state_shape)
+        
         self.model = nn.Sequential(
-            nn.Linear(np.prod(state_shape), 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True),
-            nn.Linear(128, 128), nn.ReLU(inplace=True), # new
-            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
-            # nn.Linear(128, 128), nn.ReLU(inplace=True), # new
-            nn.Linear(128, np.prod(action_shape))#, device=device),
+            # Wider first layer to capture input complexity
+            nn.Linear(input_dim, 256), 
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),  # Light regularization
+            
+            # Maintain capacity
+            nn.Linear(256, 256), 
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            
+            # Funnel down
+            nn.Linear(256, 128), 
+            nn.ReLU(inplace=True),
+            
+            # Output layer
+            nn.Linear(128, np.prod(action_shape))
         )
 
     def forward(self, obs, state=None, info={}):
         if not isinstance(obs, torch.Tensor):
-            obs = torch.tensor(obs, dtype=torch.float)#, device=device)
+            obs = torch.tensor(obs, dtype=torch.float)
         batch = obs.shape[0]
         logits = self.model(obs.view(batch, -1))
-        # print(f"logits: {logits}")
         return logits, state
 
-env = FlattenObservation(NetworkDisruptionEnv())
+env = FlattenObservation(GoldwaterEnv())
 # env = FlattenObservation(HeuristicTSPEnv())
 
 state_shape = env.observation_space.shape or env.observation_space.n
@@ -118,15 +130,53 @@ log_path = os.path.join("dqn")
 writer = SummaryWriter(log_path)
 writer.add_text("args", "[]")
 logger = TensorboardLogger(writer)
+
+def train_callback(epoch, env_step):
+    policy.set_eps(0.1)
+    # print(f"\n{'='*50}")
+    # print(f"Epoch {epoch} - Step {env_step}")
+    # print(f"{'='*50}")
+
+def test_callback(epoch, env_step):
+    policy.set_eps(0.05)
+    
+    # Collect test episodes
+    test_result = test_collector.collect(n_episode=10, render=False)
+    print(test_result)
+    
+    # Extract metrics from info dict
+    if hasattr(test_result, 'info'):
+        total_served = 0
+        total_late = 0
+        total_violations = 0
+        n_episodes = len(test_result.info.get('customers_served', []))
+        
+        for i in range(n_episodes):
+            total_served += test_result.info.get('customers_served', [0])[i]
+            total_late += test_result.info.get('late_deliveries', [0])[i]
+            total_violations += test_result.info.get('disrupted_violations', [0])[i]
+        
+        if n_episodes > 0:
+            print(f"\nEpoch {epoch} Test Results:")
+            print(f"  Avg Customers Served: {total_served/n_episodes:.2f}/12")
+            print(f"  Service Rate: {total_served/(n_episodes*12)*100:.1f}%")
+            print(f"  Avg Late Deliveries: {total_late/n_episodes:.2f}")
+            print(f"  Avg Disrupted Violations: {total_violations/n_episodes:.2f}")
+
 result = ts.trainer.OffpolicyTrainer(
     policy=policy,
     train_collector=train_collector,
     test_collector=test_collector,
-    max_epoch=60, 
-    step_per_epoch=10000,
+    # max_epoch=60, 
+    # step_per_epoch=10000,
     step_per_collect=10,
-    update_per_step=0.1, episode_per_test=100, batch_size=64,
-    train_fn=lambda epoch, env_step: policy.set_eps(0.1),
+    max_epoch=20,  # Just to verify it's learning
+    step_per_epoch=5000,
+    episode_per_test=20,  # Faster testing
+    # episode_per_test=100, 
+    update_per_step=0.1, batch_size=64,
+    train_fn=train_callback,
+    # test_fn=test_callback,  # Use custom test function
     test_fn=lambda epoch, env_step: policy.set_eps(0.05),
     resume_from_log=True,
     stop_fn=lambda mean_rewards: mean_rewards >= env.spec.reward_threshold,
