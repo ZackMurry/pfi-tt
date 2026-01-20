@@ -141,7 +141,13 @@ writer.add_text("args", "[]")
 logger = TensorboardLogger(writer)
 
 def train_callback(epoch, env_step):
-    policy.set_eps(0.1)
+    if env_step < 10_000:
+        eps = 1.0
+    else:
+        # linear decay
+        t = min(1.0, (env_step - 10_000) / 200_000)
+        eps = 1.0 + t * (0.1 - 1.0)
+    policy.set_eps(max(0.05, eps))
     # print(f"\n{'='*50}")
     # print(f"Epoch {epoch} - Step {env_step}")
     # print(f"{'='*50}")
@@ -179,7 +185,7 @@ result = ts.trainer.OffpolicyTrainer(
     # max_epoch=60, 
     # step_per_epoch=10000,
     step_per_collect=16,
-    max_epoch=40,  # Just to verify it's learning
+    max_epoch=300,
     step_per_epoch=5000,
     episode_per_test=20,  # Faster testing
     # episode_per_test=100, 
