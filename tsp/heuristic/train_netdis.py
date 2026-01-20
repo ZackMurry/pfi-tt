@@ -16,7 +16,7 @@ from tianshou.utils import TensorboardLogger
 import torch
 
 
-num_train_envs = 1
+num_train_envs = 10
 
 
 # torch.set_default_tensor_type(torch.cuda.FloatTensor)
