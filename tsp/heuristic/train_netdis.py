@@ -121,8 +121,7 @@ policy = ts.policy.DQNPolicy(
     discount_factor=0.9,
     estimation_step=3,
     target_update_freq=320,
-    device=device
-)
+).to(device)
 
 # print(torch.cuda.get_device_name(0))
 print('Memory Usage:')
