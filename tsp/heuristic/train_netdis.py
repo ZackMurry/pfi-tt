@@ -112,7 +112,7 @@ net = net.to(device)
 # 3. Verify it's on GPU
 print(f"Model on GPU: {next(net.parameters()).is_cuda}")
 
-optim = torch.optim.Adam(net.parameters(), lr=1e-3)
+optim = torch.optim.Adam(net.parameters(), lr=1e-4)
 
 # policy  = ts.policy.PPOPolicy(
 print(f"action space: {env.action_space}")
@@ -121,9 +121,9 @@ policy = ts.policy.DQNPolicy(
     model=net,
     optim=optim,
     action_space=env.action_space,
-    discount_factor=0.9,
+    discount_factor=0.99,
     estimation_step=3,
-    target_update_freq=320,
+    target_update_freq=500,
 ).to(device)
 
 # print(torch.cuda.get_device_name(0))
@@ -140,11 +140,19 @@ writer = SummaryWriter(log_path)
 writer.add_text("args", "[]")
 logger = TensorboardLogger(writer)
 
-def train_callback(epoch, env_step):
+def old_train_callback(epoch, env_step):
     policy.set_eps(0.1)
-    # print(f"\n{'='*50}")
-    # print(f"Epoch {epoch} - Step {env_step}")
-    # print(f"{'='*50}")
+
+def train_callback(epoch, env_step):
+    policy.train()
+    if env_step < 15_000:
+        eps = 0.15
+    elif env_step < 100_000:
+        progress = (env_step - 15_000) / 85_000
+        eps = 0.15 - progress * 0.7
+    else:
+        eps = 0.1
+    policy.set_eps(eps)
 
 def test_callback(epoch, env_step):
     policy.set_eps(0.05)

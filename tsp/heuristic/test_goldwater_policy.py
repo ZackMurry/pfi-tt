@@ -250,7 +250,7 @@ if __name__ == "__main__":
     action_shape = env.action_space.shape or env.action_space.n
     
     model = Net(state_shape, action_shape)
-    model.load_state_dict(torch.load("netdis_policy.pth"))
+    model.load_state_dict(torch.load("cloud_policy.pth", map_location=torch.device('cpu')))
     print('Loaded RL model!\n')
     
     optim = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -305,4 +305,4 @@ if __name__ == "__main__":
     print(f'\nVisualization episode complete!')
     print(f'Total steps: {steps}')
     print(f'Total reward: {total_reward:.2f}')
-    print(f'Customers served: {info["customers_served"]}/12')
+    # print(f'Customers served: {info["customers_served"]}/12')
