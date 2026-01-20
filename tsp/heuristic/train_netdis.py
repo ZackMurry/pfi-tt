@@ -97,11 +97,17 @@ print(f'State shape: {state_shape}')
 action_shape = env.action_space.shape or env.action_space.n
 print(f"action shape: {action_shape}")
 print(f"np.prod: {np.prod(action_shape)}")
-net = Net(state_shape, action_shape)
 
-# print(next(net.parameters()).is_cuda) # False
-# net.to(device)
-# print(next(net.parameters()).is_cuda) # True
+# 1. Check if CUDA is available and set device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+# 2. Move the network to GPU
+net = Net(state_shape, action_shape)
+net = net.to(device)  # ADD THIS LINE
+
+# 3. Verify it's on GPU
+print(f"Model on GPU: {next(net.parameters()).is_cuda}")
 
 optim = torch.optim.Adam(net.parameters(), lr=1e-3)
 
