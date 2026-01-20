@@ -49,8 +49,8 @@ class GoldwaterEnv(gym.Env):
         self.truck_x = 0
         self.truck_y = 0
         
-        # Reward tracking
-        self.customers_served = 0
+        # Reward tracking - FIXED: Initialize served_customers properly
+        self.served_customers = 0  # Customers successfully served (on-time, not rejected)
         self.late_deliveries = 0
         self.disrupted_drone_deliveries = 0
         self.previous_route_time = 0  # For reward shaping
@@ -174,25 +174,6 @@ class GoldwaterEnv(gym.Env):
         return difficulty
     
     def _get_action_mask(self):
-        """
-        Return boolean mask of valid actions.
-        Action encoding: 0=reject, 1=drone, 2+=insert at position
-        """
-        mask = np.zeros(self.action_space.n, dtype=np.int8)
-        
-        # Reject is always valid
-        mask[0] = 1
-        
-        # Drone is valid if we have a request
-        if self.request_idx < len(self.all_customers):
-            mask[1] = 1
-        
-        # Can insert at positions 0 through current_route_length
-        # Action 2 = insert at position 0, Action 3 = insert at position 1, etc.
-        max_insert_action = min(2 + len(self.planned_route) + 1, self.action_space.n)
-        mask[2:max_insert_action] = 1
-        
-        return mask
         """
         Return boolean mask of valid actions.
         Action encoding: 0=reject, 1=drone, 2+=insert at position
@@ -547,8 +528,6 @@ class GoldwaterEnv(gym.Env):
             self.rejected.append(self.all_customers[idx])
         
         return truck_route, drone_assignments, rejected
-        """Calculate Manhattan distance between two points"""
-        return abs(x2 - x1) + abs(y2 - y1)
     
     def _get_travel_time(self, x, y, customer, is_drone=False):
         """Get travel time to customer"""
@@ -630,18 +609,18 @@ class GoldwaterEnv(gym.Env):
         
         # Check if all customers processed
         if self.request_idx >= len(self.all_customers):
-            # Final reward based on customers served
-            self.customers_served = len(self.customers)
+            # FIXED: Calculate served_customers as customers delivered on time
+            self.served_customers = len(self.customers) - num_late
             
             # Progressive reward for customers served
-            reward += self.customers_served * 5  # Increased from 3
+            reward += self.served_customers * 5  # Increased from 3
             
             # Big bonus for serving all customers on time
             if num_late == 0 and len(self.customers) == self.NUM_CUSTOMERS:
                 reward += 20  # Increased from 10
             
-            # Bonus for high service rate
-            service_rate = self.customers_served / self.NUM_CUSTOMERS
+            # Bonus for high service rate (based on on-time deliveries)
+            service_rate = self.served_customers / self.NUM_CUSTOMERS
             if service_rate >= 0.9:
                 reward += 10
             elif service_rate >= 0.75:
@@ -653,7 +632,7 @@ class GoldwaterEnv(gym.Env):
         
         return self.state, reward, done, False, {
             "action_mask": self._get_action_mask(),
-            "customers_served": self.customers_served,
+            "served_customers": self.served_customers,  # On-time deliveries
             "late_deliveries": self.late_deliveries,
             "disrupted_violations": self.disrupted_drone_deliveries
         }
@@ -804,8 +783,8 @@ class GoldwaterEnv(gym.Env):
         self.truck_y = 0
         self.disruptions_encountered = []
         
-        # Reset metrics
-        self.customers_served = 0
+        # FIXED: Reset metrics including served_customers
+        self.served_customers = 0
         self.late_deliveries = 0
         self.disrupted_drone_deliveries = 0
         self.previous_route_time = 0
@@ -857,23 +836,6 @@ class GoldwaterEnv(gym.Env):
         
         return scenarios
     
-    @staticmethod
-    def save_test_scenarios(scenarios, filename='test_scenarios.npy'):
-        """Save test scenarios to file"""
-        import pickle
-        with open(filename, 'wb') as f:
-            pickle.dump(scenarios, f)
-        print(f"Saved {len(scenarios)} test scenarios to {filename}")
-    
-    @staticmethod
-    def load_test_scenarios(filename='test_scenarios.npy'):
-        """Load test scenarios from file"""
-        import pickle
-        with open(filename, 'rb') as f:
-            scenarios = pickle.load(f)
-        print(f"Loaded {len(scenarios)} test scenarios from {filename}")
-        return scenarios
-    
     def render(self, save_path=None):
         """Visualize the current route and compare to heuristic baseline"""
         fig, ax = plt.subplots(figsize=(12, 10))
@@ -885,10 +847,10 @@ class GoldwaterEnv(gym.Env):
         
         # Calculate final metrics
         final_valid, final_makespan, final_tardiness = self._simulate_schedule()
-        title = f'Episode {self.episodes}: {len(self.customers)}/{self.NUM_CUSTOMERS} served'
+        title = f'Episode {self.episodes}: {self.served_customers}/{self.NUM_CUSTOMERS} served on-time'
         if self.initial_plan:
             initial_served = len(self.initial_plan['truck_route']) + len(self.initial_plan['drone_assignments'])
-            improvement = len(self.customers) - initial_served
+            improvement = self.served_customers - initial_served
             title += f' (Heuristic: {initial_served}, Δ={improvement:+d})'
         ax.set_title(title, fontsize=14, fontweight='bold')
         ax.grid(True, alpha=0.3)
@@ -993,9 +955,10 @@ class GoldwaterEnv(gym.Env):
         # Add legend
         ax.legend(loc='upper right', fontsize=10, framealpha=0.9)
         
-        # Add text box with statistics
+        # Add text box with statistics - FIXED: Use served_customers correctly
         stats_text = f"RL Performance:\n"
-        stats_text += f"  Served: {len(self.customers)}/{self.NUM_CUSTOMERS}\n"
+        stats_text += f"  On-time: {self.served_customers}/{self.NUM_CUSTOMERS}\n"
+        stats_text += f"  Late: {self.late_deliveries}\n"
         stats_text += f"  Rejected: {len(self.rejected)}\n"
         stats_text += f"  Drone Uses: {len(self.drone_route)}\n"
         if final_valid:
