@@ -146,12 +146,13 @@ def old_train_callback(epoch, env_step):
 def train_callback(epoch, env_step):
     policy.train()
     if env_step < 15_000:
-        eps = 0.15
-    elif env_step < 100_000:
-        progress = (env_step - 15_000) / 85_000
-        eps = 0.15 - progress * 0.7
+        eps = 0.25
+    elif env_step < 250_000:  # ← Extended decay
+        progress = (env_step - 15_000) / (250_000 - 15_000)
+        eps = 0.15 - progress * 0.05  # Only decay to 0.10
     else:
-        eps = 0.1
+        eps = 0.10  # ← Keep higher minimum
+    
     policy.set_eps(eps)
 
 def test_callback(epoch, env_step):

@@ -531,13 +531,12 @@ class GoldwaterEnv(gym.Env):
     
     def step(self, action):
         """Execute one step in the environment"""
-        action -= 1  # Convert to: reject=-1, drone=0, positions=[1,n]
+        action -= 1
         self.step_count += 1
         
         reward = 0
         done = False
         
-        # Get current request
         if self.request_idx >= len(self.all_customers):
             return self.state, 0, True, True, {"action_mask": self._get_action_mask()}
         
@@ -546,54 +545,42 @@ class GoldwaterEnv(gym.Env):
         # Process action
         if action == -1:  # Reject customer
             self.rejected.append(request)
-            reward -= 3  # Increased penalty for rejecting
+            reward -= 3
             
         elif action == 0:  # Send drone
             if request['disrupted']:
-                # CRITICAL: Large penalty for sending drone to disrupted location
-                reward -= 15  # Increased from 10
+                reward -= 100
                 self.disrupted_drone_deliveries += 1
                 done = True
             else:
-                # Reward for smart drone usage
                 if self.drone_with_truck:
-                    self.planned_route.append(0)  # Mark drone departure
+                    self.planned_route.append(0)
                     self.drone_route.append(len(self.customers) + 1)
                     self.drone_with_truck = False
+                    # REMOVED: reward += 2
                 else:
-                    self.planned_route.append(0)  # Mark drone return
+                    self.planned_route.append(0)
                     self.drone_with_truck = True
-                    reward += 2  # Reward for collecting drone
-                
+                    # REMOVED: reward += 2
                 self.customers.append(request)
         
-        else:  # Add to truck route at position
+        else:  # Add to truck route
             insert_pos = min(action, len(self.planned_route) + 1)
             self.planned_route.insert(insert_pos - 1, len(self.customers) + 1)
             self.customers.append(request)
-            reward += 1.0  # Reduced from 1.5 to make truck less attractive
+            reward += 1.0
         
-        # Estimate route efficiency (reward shaping)
-        current_route_time = self._estimate_route_time()
-        if self.previous_route_time > 0:
-            # Reward if route is getting more efficient
-            time_improvement = self.previous_route_time - current_route_time
-            if time_improvement > 0:
-                reward += min(time_improvement * 0.1, 1.0)  # Cap improvement bonus
-            elif time_improvement < -5:  # Penalize if route gets much worse
-                reward -= 0.5
-        self.previous_route_time = current_route_time
+        # REMOVED: All the route time improvement reward shaping
         
-        # Validate route and calculate delivery times
+        # Validate route
         route_valid, num_late = self._validate_route()
         
         if not route_valid:
-            reward -= 8  # Increased penalty for invalid routes
+            reward -= 8
             done = True
         
-        # Stronger penalty for late deliveries
         if num_late > 0:
-            reward -= num_late * 4  # Increased from 2
+            reward -= num_late * 4
             self.late_deliveries += num_late
         
         # Move to next customer
@@ -601,22 +588,34 @@ class GoldwaterEnv(gym.Env):
         
         # Check if all customers processed
         if self.request_idx >= len(self.all_customers):
-            # FIXED: Calculate served_customers as customers delivered on time
             self.served_customers = len(self.customers) - num_late
             
-            # Progressive reward for customers served
-            reward += self.served_customers * 5  # Increased from 3
+            # Main reward: customers served on-time
+            reward += self.served_customers * 5
             
-            # Big bonus for serving all customers on time
+            # Bonuses for high service rate
             if num_late == 0 and len(self.customers) == self.NUM_CUSTOMERS:
-                reward += 20  # Increased from 10
+                reward += 20
             
-            # Bonus for high service rate (based on on-time deliveries)
             service_rate = self.served_customers / self.NUM_CUSTOMERS
             if service_rate >= 0.9:
                 reward += 10
             elif service_rate >= 0.75:
                 reward += 5
+            
+            # NEW: Compare route time to heuristic baseline
+            _, final_time, _ = self._simulate_schedule()
+            if self.heuristic_time and self.heuristic_time > 0:
+                time_ratio = final_time / self.heuristic_time
+                
+                if time_ratio < 0.9:  # >10% faster than heuristic
+                    reward += 50
+                elif time_ratio < 0.95:  # 5-10% faster
+                    reward += 30
+                elif time_ratio < 1.05:  # Within 5% (comparable)
+                    reward += 25
+                elif time_ratio < 1.5:  # >20% slower
+                    reward += 20
             
             done = True
         
@@ -624,7 +623,7 @@ class GoldwaterEnv(gym.Env):
         
         return self.state, reward, done, False, {
             "action_mask": self._get_action_mask(),
-            "served_customers": self.served_customers,  # On-time deliveries
+            "served_customers": self.served_customers,
             "late_deliveries": self.late_deliveries,
             "disrupted_violations": self.disrupted_drone_deliveries
         }
@@ -747,6 +746,22 @@ class GoldwaterEnv(gym.Env):
             "customers_added": len(self.customers)
         }
     
+    def _estimate_heuristic_time(self):
+        """Calculate makespan of heuristic baseline route"""
+        if not self.initial_plan:
+            return 0
+        
+        time = 0
+        x, y = 0, 0
+        
+        # Simulate truck visiting all heuristic customers
+        for cust_idx in self.initial_plan['truck_route']:
+            cust = self.all_customers[cust_idx]
+            time += self._manhattan_distance(x, y, cust['x'], cust['y'])
+            x, y = cust['x'], cust['y']
+        
+        return time
+
     def reset(self, seed=None, options=None):
         """Reset the environment for a new episode"""
         if seed is not None:
@@ -787,7 +802,10 @@ class GoldwaterEnv(gym.Env):
         # WARM START: Initialize with heuristic route
         if self.use_warm_start:
             self._initialize_from_heuristic()
-            # Now RL will process each customer sequentially and can modify the plan
+            
+            # Calculate heuristic baseline time for comparison
+            self.heuristic_time = self._estimate_heuristic_time()  # NEW
+            
             # Reset to process from scratch
             self.customers = []
             self.planned_route = []
@@ -796,9 +814,9 @@ class GoldwaterEnv(gym.Env):
             self.drone_with_truck = True
         else:
             self.initial_plan = None
+            self.heuristic_time = None  # NEW
         
         self._update_state()
-        
         return self.state, {"action_mask": self._get_action_mask()}
     
     @staticmethod
