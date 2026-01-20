@@ -281,6 +281,7 @@ if __name__ == "__main__":
     steps = 0
     total_reward = 0
     
+    actions = []
     while not done:
         steps += 1
         state_tensor = Batch(obs=[obs])
@@ -289,12 +290,16 @@ if __name__ == "__main__":
         with torch.no_grad():
             result = rl_policy(state_tensor)
             action = result.act[0]
+        actions.append(action - 1)
         
         obs, reward, done, truncated, info = env_viz.step(action)
         total_reward += reward
         print(f'Step {steps}: Action {action-1}, Reward {reward:.2f}')
     env_viz.env.render(save_path='viz.png')
     
+    print(f'Actions: {actions}')
+    print(f'Route: {env_viz.env.planned_route}')
+    print(f'All customers: {env_viz.env.all_customers}')
     print(f'\nVisualization episode complete!')
     print(f'Total steps: {steps}')
     print(f'Total reward: {total_reward:.2f}')
