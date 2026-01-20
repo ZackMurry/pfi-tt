@@ -567,7 +567,6 @@ class GoldwaterEnv(gym.Env):
                     self.planned_route.append(0)  # Mark drone departure
                     self.drone_route.append(len(self.customers) + 1)
                     self.drone_with_truck = False
-                    reward += 2  # Reward for using drone efficiently
                 else:
                     self.planned_route.append(0)  # Mark drone return
                     self.drone_with_truck = True
