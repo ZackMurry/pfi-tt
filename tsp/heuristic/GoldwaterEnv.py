@@ -16,7 +16,7 @@ class GoldwaterEnv(gym.Env):
         # Configuration
         self.NUM_CUSTOMERS = num_customers
         self.DRONE_SPEED_FACTOR = 1.5  # Drones are faster than trucks
-        self.MAX_T = 200  # Maximum time horizon
+        self.MAX_T = 240  # Maximum time horizon
         self.MAX_X = 20
         self.MAX_Y = 20
         self.DISRUPTION_PROB = 0.2  # 20% of customers have network disruptions
@@ -128,7 +128,7 @@ class GoldwaterEnv(gym.Env):
             x = np.random.randint(2, self.MAX_X - 2)
             y = np.random.randint(2, self.MAX_Y - 2)
             min_time = self._manhattan_distance(0, 0, x, y)
-            deadline = int(min_time * np.random.uniform(2.0, 3.5))
+            deadline = int(min_time * np.random.uniform(3.0, 5.5))
             disrupted = 1 if np.random.random() < self.DISRUPTION_PROB else 0
             
             customers.append({
