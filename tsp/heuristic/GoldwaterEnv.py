@@ -591,7 +591,7 @@ class GoldwaterEnv(gym.Env):
             self.served_customers = len(self.customers) - num_late
             
             # Main reward: customers served on-time
-            reward += self.served_customers * 5
+            reward += self.served_customers * 10
             
             # Bonuses for high service rate
             if num_late == 0 and len(self.customers) == self.NUM_CUSTOMERS:
@@ -600,26 +600,21 @@ class GoldwaterEnv(gym.Env):
             service_rate = self.served_customers / self.NUM_CUSTOMERS
             if service_rate >= 0.9:
                 reward += 10
-            elif service_rate >= 0.75:
-                reward += 5
             
             # NEW: Compare route time to heuristic baseline
             _, final_time, _ = self._simulate_schedule()
-            if self.heuristic_time and self.heuristic_time > 0:
+            if service_rate >= 0.8 and self.heuristic_time and self.heuristic_time > 0:
                 time_ratio = final_time / self.heuristic_time
-                
-                if time_ratio < 0.9:  # >10% faster than heuristic
-                    reward += 50
-                elif time_ratio < 0.95:  # 5-10% faster
+                if time_ratio < 0.9:  # Faster than heuristic
                     reward += 30
-                elif time_ratio < 1.05:  # Within 5% (comparable)
-                    reward += 25
-                elif time_ratio < 1.5:  # >20% slower
-                    reward += 20
-                elif time_ratio < 2:
-                    reward += 10
-                elif time_ratio < 3:
-                    reward += 5
+                elif time_ratio < 1.0:  # Slightly faster
+                    reward += 15
+                elif time_ratio < 1.1:  # Within 10%
+                    reward += 0  # ← NEUTRAL, not rewarding
+                elif time_ratio < 1.5:  # 10-50% slower
+                    reward -= 10  # ← PENALTY, not reward!
+                else:  # >50% slower
+                    reward -= 30  # ← BIG PENALTY
             
             done = True
         
