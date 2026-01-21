@@ -181,37 +181,38 @@ def test_callback(epoch, env_step):
             print(f"  Avg Late Deliveries: {total_late/n_episodes:.2f}")
             print(f"  Avg Disrupted Violations: {total_violations/n_episodes:.2f}")
 
-result = ts.trainer.OffpolicyTrainer(
-    policy=policy,
-    train_collector=train_collector,
-    test_collector=test_collector,
-    # max_epoch=60, 
-    # step_per_epoch=10000,
-    step_per_collect=16,
-    max_epoch=500,
-    step_per_epoch=10000,
-    episode_per_test=300,
-    # episode_per_test=100, 
-    update_per_step=0.1, batch_size=128,
-    train_fn=train_callback,
-    # test_fn=test_callback,  # Use custom test function
-    test_fn=lambda epoch, env_step: policy.set_eps(0.0),
-    resume_from_log=True,
-    stop_fn=lambda mean_rewards: mean_rewards >= 100,
-    logger=logger
-).run()
-print(f'Finished training!')
+try:
+    result = ts.trainer.OffpolicyTrainer(
+        policy=policy,
+        train_collector=train_collector,
+        test_collector=test_collector,
+        # max_epoch=60, 
+        # step_per_epoch=10000,
+        step_per_collect=16,
+        max_epoch=300,
+        step_per_epoch=10000,
+        episode_per_test=500,
+        # episode_per_test=100, 
+        update_per_step=0.1, batch_size=128,
+        train_fn=train_callback,
+        # test_fn=test_callback,  # Use custom test function
+        test_fn=lambda epoch, env_step: policy.set_eps(0.0),
+        resume_from_log=True,
+        stop_fn=lambda mean_rewards: mean_rewards >= 100,
+        logger=logger
+    ).run()
+except KeyboardInterrupt:
+    print('Training interrupted by user!')
+finally:
+    print(f'Finished training!')
 
-# save_logs()
-env.reset()
+    # save_logs()
+    env.reset()
 
-policy.eval()
-policy.set_eps(0.00)
-# collector = ts.data.Collector(policy, env, exploration_noise=True)
-# collector.collect(n_episode=5, render=1)
+    policy.eval()
+    policy.set_eps(0.00)
+    # collector = ts.data.Collector(policy, env, exploration_noise=True)
+    # collector.collect(n_episode=5, render=1)
 
-torch.save(policy.model.state_dict(), 'netdis_policy.pth')
-
-# env.use_dataset = True
-# collector.collect(n_episode=1, render=0)
+    torch.save(policy.model.state_dict(), 'netdis_policy.pth')
 

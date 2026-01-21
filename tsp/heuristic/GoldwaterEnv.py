@@ -568,7 +568,7 @@ class GoldwaterEnv(gym.Env):
             insert_pos = min(action, len(self.planned_route) + 1)
             self.planned_route.insert(insert_pos - 1, len(self.customers) + 1)
             self.customers.append(request)
-            reward += 1.0
+            # reward += 1.0
         
         # REMOVED: All the route time improvement reward shaping
         
