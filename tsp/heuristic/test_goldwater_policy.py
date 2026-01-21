@@ -250,7 +250,7 @@ if __name__ == "__main__":
     action_shape = env.action_space.shape or env.action_space.n
     
     model = Net(state_shape, action_shape)
-    model.load_state_dict(torch.load("cloud_policy_4.pth", map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load("cloud_policy_5.pth", map_location=torch.device('cpu')))
     print('Loaded RL model!\n')
     
     optim = torch.optim.Adam(model.parameters(), lr=1e-3)

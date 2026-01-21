@@ -108,7 +108,7 @@ class GoldwaterEnv(gym.Env):
                 # Deadline: guaranteed feasible + buffer
                 min_time = self._manhattan_distance(0, 0, x, y)
                 # Add buffer: 2x-3x the minimum time to ensure feasibility
-                deadline = int(min_time * np.random.uniform(2.0, 4.5))
+                deadline = 5 + int(min_time * np.random.uniform(2.0, 3.0))
                 
                 # Controlled disruption probability
                 disrupted = 1 if np.random.random() < self.DISRUPTION_PROB else 0
@@ -125,7 +125,7 @@ class GoldwaterEnv(gym.Env):
             x = np.random.randint(2, self.MAX_X - 2)
             y = np.random.randint(2, self.MAX_Y - 2)
             min_time = self._manhattan_distance(0, 0, x, y)
-            deadline = 5 + int(min_time * np.random.uniform(2.0, 4.5))
+            deadline = 5 + int(min_time * np.random.uniform(2.0, 3.0))
             disrupted = 1 if np.random.random() < self.DISRUPTION_PROB else 0
             
             customers.append({
@@ -611,6 +611,7 @@ class GoldwaterEnv(gym.Env):
             _, final_time, _ = self._simulate_schedule()
             if self.heuristic_time and self.heuristic_time > 0:
                 time_ratio = final_time / self.heuristic_time
+                og_reward = reward
                 if time_ratio < 0.9:  # Faster than heuristic
                     reward += 30
                 elif time_ratio < 1.0:  # Slightly faster
@@ -621,6 +622,7 @@ class GoldwaterEnv(gym.Env):
                     reward -= 10  # ← PENALTY, not reward!
                 else:  # >50% slower
                     reward -= 30  # ← BIG PENALTY
+                print('time reward: ', reward - og_reward)
             
             done = True
         
