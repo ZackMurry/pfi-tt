@@ -191,7 +191,7 @@ try:
         step_per_collect=64,
         max_epoch=300,
         step_per_epoch=10000,
-        episode_per_test=500,
+        episode_per_test=100,
         # episode_per_test=100, 
         update_per_step=0.1, batch_size=128,
         train_fn=train_callback,
