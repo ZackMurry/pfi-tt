@@ -13,7 +13,7 @@ class GoldwaterEnv(gym.Env):
     RoutePEARL environment for training RL agents on network-aware
     truck-drone delivery route planning.
     """
-    def __init__(self, num_customers=12, use_warm_start=True, test_mode=False, test_scenarios=None, *args, **kwargs):
+    def __init__(self, num_customers=8, use_warm_start=True, test_mode=False, test_scenarios=None, *args, **kwargs):
         # Configuration
         self.NUM_CUSTOMERS = num_customers
         self.DRONE_SPEED_FACTOR = 1.5  # Drones are faster than trucks
