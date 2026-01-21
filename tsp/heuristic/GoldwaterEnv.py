@@ -545,7 +545,7 @@ class GoldwaterEnv(gym.Env):
         # Process action
         if action == -1:  # Reject customer
             self.rejected.append(request)
-            reward -= 3
+            reward -= 10 # Penalize pretty heavily
             
         elif action == 0:  # Send drone
             if request['disrupted']:

@@ -190,12 +190,12 @@ result = ts.trainer.OffpolicyTrainer(
     step_per_collect=16,
     max_epoch=500,
     step_per_epoch=5000,
-    episode_per_test=20,  # Faster testing
+    episode_per_test=200,
     # episode_per_test=100, 
     update_per_step=0.1, batch_size=128,
     train_fn=train_callback,
     # test_fn=test_callback,  # Use custom test function
-    test_fn=lambda epoch, env_step: policy.set_eps(0.05),
+    test_fn=lambda epoch, env_step: policy.set_eps(0.0),
     resume_from_log=True,
     stop_fn=lambda mean_rewards: mean_rewards >= 100,
     logger=logger
