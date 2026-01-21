@@ -56,7 +56,7 @@ class GoldwaterEnv(gym.Env):
         self.previous_route_time = 0  # For reward shaping
         
         # Define observation space
-        self.max_queue = self.NUM_CUSTOMERS + 8
+        self.max_queue = self.NUM_CUSTOMERS * 2
         self.max_drone_queue = self.NUM_CUSTOMERS + 1
         self.observation_space = spaces.Dict({
             "planned_route": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 1] * self.max_queue),
@@ -520,6 +520,7 @@ class GoldwaterEnv(gym.Env):
         #     self.rejected.append(request)
         #     reward -= 10 # Penalize pretty heavily
             
+        # todo: use 1 as drone action ninstead of 0
         if action == 0:  # Send drone
             if request['disrupted']:
                 reward -= 100
@@ -531,6 +532,8 @@ class GoldwaterEnv(gym.Env):
                 self.customers.append(request)
                 # REMOVED: reward += 2
             else:
+                if len(self.planned_route) > 0 and self.planned_route[-1] == 0:
+                    reward -= 5
                 self.planned_route.append(0)
                 self.drone_with_truck = True
                 self.request_idx -= 1 # Don't move to next customer
