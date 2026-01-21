@@ -56,10 +56,11 @@ class GoldwaterEnv(gym.Env):
         self.previous_route_time = 0  # For reward shaping
         
         # Define observation space
-        max_queue = self.NUM_CUSTOMERS + 2
+        max_queue = self.NUM_CUSTOMERS + 6
+        max_drone_queue = self.NUM_CUSTOMERS
         self.observation_space = spaces.Dict({
             "planned_route": spaces.MultiDiscrete([max_queue] * self.NUM_CUSTOMERS),
-            "drone_route": spaces.MultiDiscrete([max_queue] * self.NUM_CUSTOMERS),
+            "drone_route": spaces.MultiDiscrete([max_drone_queue] * self.NUM_CUSTOMERS),
             "request": spaces.Dict({
                 "x": spaces.Discrete(self.MAX_X + 1),
                 "y": spaces.Discrete(self.MAX_Y + 1),
@@ -541,6 +542,7 @@ class GoldwaterEnv(gym.Env):
             return self.state, 0, True, True, {"action_mask": self._get_action_mask()}
         
         request = self.all_customers[self.request_idx]
+        print("Requesting customer", self.request_idx, "took action", action)
         
         # Process action
         if action == -1:  # Reject customer
