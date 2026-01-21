@@ -78,8 +78,8 @@ class GoldwaterEnv(gym.Env):
         })
         # print(self.observation_space)
         
-        # Define action space: reject (-1), drone (0), or insert at position [1, n]
-        self.action_space = spaces.Discrete(2 + self.NUM_CUSTOMERS)
+        # Define action space: drone (0) or insert at position [1, n]
+        self.action_space = spaces.Discrete(1 + self.NUM_CUSTOMERS)
         
         self.reset()
     
@@ -504,7 +504,6 @@ class GoldwaterEnv(gym.Env):
     
     def step(self, action):
         """Execute one step in the environment"""
-        action -= 1
         self.step_count += 1
         
         reward = 0
@@ -517,32 +516,26 @@ class GoldwaterEnv(gym.Env):
         # print("Requesting customer", self.request_idx, "took action", action)
         
         # Process action
-        if action == -1:  # Reject customer
-            self.rejected.append(request)
-            reward -= 10 # Penalize pretty heavily
+        # if action == -1:  # Reject customer
+        #     self.rejected.append(request)
+        #     reward -= 10 # Penalize pretty heavily
             
-        elif action == 0:  # Send drone
-            if request['disrupted']:
-                reward -= 100
-                self.disrupted_drone_deliveries += 1
-                done = True
+        if action == 0 and not request['disrupted']:  # Send drone
+            if self.drone_with_truck:
+                self.planned_route.append(0)
+                self.drone_route.append(len(self.customers) + 1)
+                self.drone_with_truck = False
+                self.customers.append(request)
+                # REMOVED: reward += 2
             else:
-                if self.drone_with_truck:
-                    self.planned_route.append(0)
-                    self.drone_route.append(len(self.customers) + 1)
-                    self.drone_with_truck = False
-                    self.customers.append(request)
-                    # REMOVED: reward += 2
-                else:
-                    self.planned_route.append(0)
-                    self.drone_with_truck = True
-                    self.request_idx -= 1 # Don't move to next customer
-                    # REMOVED: reward += 2
-        
+                self.planned_route.append(0)
+                self.drone_with_truck = True
+                self.request_idx -= 1 # Don't move to next customer
+                # REMOVED: reward += 2
         else:  # Add to truck route
-            insert_pos = min(action, len(self.planned_route) + 1)
+            insert_pos = max(1, min(action, len(self.planned_route) + 1))
             self.planned_route.insert(insert_pos - 1, len(self.customers) + 1)
-            self.customers.append(request)
+            self.customers.insert(insert_pos - 1, request)
             # reward += 1.0
         
         # REMOVED: All the route time improvement reward shaping
