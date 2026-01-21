@@ -543,14 +543,6 @@ class GoldwaterEnv(gym.Env):
         # Validate route
         route_valid, num_late = self._validate_route()
         
-        if not route_valid:
-            reward -= 8
-            done = True
-        
-        if num_late > 0:
-            reward -= num_late * 4
-            self.late_deliveries += num_late
-        
         # Move to next customer
         self.request_idx += 1
         
@@ -561,6 +553,9 @@ class GoldwaterEnv(gym.Env):
             
             # Main reward: customers served on-time
             reward += self.served_customers * 10
+
+            if num_late > 0:
+                reward -= num_late * 10
             
             # Bonuses for high service rate
             if num_late == 0 and len(self.customers) == self.NUM_CUSTOMERS:
@@ -594,7 +589,6 @@ class GoldwaterEnv(gym.Env):
         return self.state, reward, done, False, {
             "action_mask": self._get_action_mask(),
             "served_customers": self.served_customers,
-            "late_deliveries": self.late_deliveries,
             "disrupted_violations": self.disrupted_drone_deliveries
         }
     
