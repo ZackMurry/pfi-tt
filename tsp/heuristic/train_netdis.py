@@ -121,7 +121,7 @@ policy = ts.policy.DQNPolicy(
     model=net,
     optim=optim,
     action_space=env.action_space,
-    discount_factor=0.95,
+    discount_factor=0.975,
     estimation_step=2,
     target_update_freq=1000
 ).to(device)
@@ -189,8 +189,8 @@ result = ts.trainer.OffpolicyTrainer(
     # step_per_epoch=10000,
     step_per_collect=16,
     max_epoch=500,
-    step_per_epoch=5000,
-    episode_per_test=200,
+    step_per_epoch=10000,
+    episode_per_test=500,
     # episode_per_test=100, 
     update_per_step=0.1, batch_size=128,
     train_fn=train_callback,

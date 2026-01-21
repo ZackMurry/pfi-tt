@@ -603,7 +603,7 @@ class GoldwaterEnv(gym.Env):
             
             # NEW: Compare route time to heuristic baseline
             _, final_time, _ = self._simulate_schedule()
-            if service_rate >= 0.8 and self.heuristic_time and self.heuristic_time > 0:
+            if self.heuristic_time and self.heuristic_time > 0:
                 time_ratio = final_time / self.heuristic_time
                 if time_ratio < 0.9:  # Faster than heuristic
                     reward += 30
