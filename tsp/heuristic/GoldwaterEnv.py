@@ -91,41 +91,11 @@ class GoldwaterEnv(gym.Env):
         """Generate randomized customer locations and deadlines with controlled difficulty"""
         customers = []
         
-        # Generate customers in clusters to ensure feasibility
-        num_clusters = np.random.randint(2, 4)  # 2-3 clusters
-        customers_per_cluster = self.NUM_CUSTOMERS // num_clusters
-        
-        for cluster_idx in range(num_clusters):
-            # Random cluster center
-            center_x = np.random.randint(3, self.MAX_X - 3)
-            center_y = np.random.randint(3, self.MAX_Y - 3)
-            
-            for i in range(customers_per_cluster):
-                # Generate customer near cluster center
-                x = np.clip(center_x + np.random.randint(-4, 5), 1, self.MAX_X - 1)
-                y = np.clip(center_y + np.random.randint(-4, 5), 1, self.MAX_Y - 1)
-                
-                # Deadline: guaranteed feasible + buffer
-                min_time = self._manhattan_distance(0, 0, x, y)
-                # Add buffer: 2x-3x the minimum time to ensure feasibility
-                deadline = 5 + int(min_time * np.random.uniform(2.0, 3.0))
-                
-                # Controlled disruption probability
-                disrupted = 1 if np.random.random() < self.DISRUPTION_PROB else 0
-                
-                customers.append({
-                    "x": x,
-                    "y": y,
-                    "deadline": deadline,
-                    "disrupted": disrupted
-                })
-        
-        # Fill remaining customers if any
         while len(customers) < self.NUM_CUSTOMERS:
             x = np.random.randint(2, self.MAX_X - 2)
             y = np.random.randint(2, self.MAX_Y - 2)
             min_time = self._manhattan_distance(0, 0, x, y)
-            deadline = 5 + int(min_time * np.random.uniform(2.0, 3.0))
+            deadline = 5 + int(min_time * np.random.uniform(2.0, 3.5))
             disrupted = 1 if np.random.random() < self.DISRUPTION_PROB else 0
             
             customers.append({
