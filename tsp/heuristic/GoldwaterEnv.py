@@ -56,11 +56,11 @@ class GoldwaterEnv(gym.Env):
         self.previous_route_time = 0  # For reward shaping
         
         # Define observation space
-        max_queue = self.NUM_CUSTOMERS + 6
-        max_drone_queue = self.NUM_CUSTOMERS
+        self.max_queue = self.NUM_CUSTOMERS + 6
+        self.max_drone_queue = self.NUM_CUSTOMERS + 1
         self.observation_space = spaces.Dict({
-            "planned_route": spaces.MultiDiscrete([max_queue] * self.NUM_CUSTOMERS),
-            "drone_route": spaces.MultiDiscrete([max_drone_queue] * self.NUM_CUSTOMERS),
+            "planned_route": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 1] * self.max_queue),
+            "drone_route": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 1] * self.max_drone_queue),
             "request": spaces.Dict({
                 "x": spaces.Discrete(self.MAX_X + 1),
                 "y": spaces.Discrete(self.MAX_Y + 1),
@@ -73,8 +73,10 @@ class GoldwaterEnv(gym.Env):
                 "deadline": spaces.MultiDiscrete([self.MAX_T + 1] * self.NUM_CUSTOMERS),
                 "disrupted": spaces.MultiDiscrete([2] * self.NUM_CUSTOMERS)
             }),
-            "customers_added": spaces.Discrete(self.NUM_CUSTOMERS + 1)
+            "customers_added": spaces.Discrete(self.NUM_CUSTOMERS + 1),
+            "drone_out": spaces.Discrete(2)
         })
+        # print(self.observation_space)
         
         # Define action space: reject (-1), drone (0), or insert at position [1, n]
         self.action_space = spaces.Discrete(2 + self.NUM_CUSTOMERS)
@@ -542,7 +544,7 @@ class GoldwaterEnv(gym.Env):
             return self.state, 0, True, True, {"action_mask": self._get_action_mask()}
         
         request = self.all_customers[self.request_idx]
-        print("Requesting customer", self.request_idx, "took action", action)
+        # print("Requesting customer", self.request_idx, "took action", action)
         
         # Process action
         if action == -1:  # Reject customer
@@ -559,12 +561,13 @@ class GoldwaterEnv(gym.Env):
                     self.planned_route.append(0)
                     self.drone_route.append(len(self.customers) + 1)
                     self.drone_with_truck = False
+                    self.customers.append(request)
                     # REMOVED: reward += 2
                 else:
                     self.planned_route.append(0)
                     self.drone_with_truck = True
+                    self.request_idx -= 1 # Don't move to next customer
                     # REMOVED: reward += 2
-                self.customers.append(request)
         
         else:  # Add to truck route
             insert_pos = min(action, len(self.planned_route) + 1)
@@ -590,6 +593,7 @@ class GoldwaterEnv(gym.Env):
         
         # Check if all customers processed
         if self.request_idx >= len(self.all_customers):
+            # print('Done!', self.planned_route)
             self.served_customers = len(self.customers) - num_late
             
             # Main reward: customers served on-time
@@ -727,12 +731,18 @@ class GoldwaterEnv(gym.Env):
         
         # Pad routes
         planned = self.planned_route.copy()
-        while len(planned) < self.NUM_CUSTOMERS:
+        while len(planned) < self.max_queue:
             planned.append(0)
         
         drone_r = self.drone_route.copy()
-        while len(drone_r) < self.NUM_CUSTOMERS:
+        while len(drone_r) < self.max_drone_queue:
             drone_r.append(0)
+        # print('len', len(drone_r), len(self.customers), len(custs['x']))
+        # if len(self.customers) > self.NUM_CUSTOMERS:
+        #     print('too many custs!')
+        #     print(self.customers)
+        #     print('all len', len(self.all_customers))
+        #     print(self.all_customers)
         
         self.state = {
             "request": req,
@@ -744,7 +754,8 @@ class GoldwaterEnv(gym.Env):
             },
             "planned_route": np.array(planned),
             "drone_route": np.array(drone_r),
-            "customers_added": len(self.customers)
+            "customers_added": len(self.customers),
+            "drone_out": self.planned_route.count(0) % 2
         }
     
     def _estimate_heuristic_time(self):
