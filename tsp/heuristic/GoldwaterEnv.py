@@ -520,8 +520,11 @@ class GoldwaterEnv(gym.Env):
         #     self.rejected.append(request)
         #     reward -= 10 # Penalize pretty heavily
             
-        if action == 0 and not request['disrupted']:  # Send drone
-            if self.drone_with_truck:
+        if action == 0:  # Send drone
+            if request['disrupted']:
+                reward -= 100
+                done = True
+            elif self.drone_with_truck:
                 self.planned_route.append(0)
                 self.drone_route.append(len(self.customers) + 1)
                 self.drone_with_truck = False
@@ -533,7 +536,7 @@ class GoldwaterEnv(gym.Env):
                 self.request_idx -= 1 # Don't move to next customer
                 # REMOVED: reward += 2
         else:  # Add to truck route
-            insert_pos = max(1, min(action, len(self.planned_route) + 1))
+            insert_pos = min(action, len(self.planned_route) + 1)
             self.planned_route.insert(insert_pos - 1, len(self.customers) + 1)
             self.customers.insert(insert_pos - 1, request)
             # reward += 1.0
