@@ -56,7 +56,7 @@ class GoldwaterEnv(gym.Env):
         self.previous_route_time = 0  # For reward shaping
         
         # Define observation space
-        self.max_queue = self.NUM_CUSTOMERS + 6
+        self.max_queue = self.NUM_CUSTOMERS + 8
         self.max_drone_queue = self.NUM_CUSTOMERS + 1
         self.observation_space = spaces.Dict({
             "planned_route": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 1] * self.max_queue),
