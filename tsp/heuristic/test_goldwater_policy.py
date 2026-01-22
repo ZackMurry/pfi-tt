@@ -6,6 +6,11 @@ from gymnasium.wrappers import FlattenObservation
 import gymnasium as gym
 import tianshou as ts
 from tianshou.data import Batch
+import sys
+
+if len(sys.argv) < 2:
+    print('Not enough arguments')
+    sys.exit(1)
 
 gym.envs.register(
     id='NetworkDisruptionEnv-v0',
@@ -64,7 +69,7 @@ class NearestNeighborPolicy:
         # customers_added: 1 value
         
         idx = 0
-        num_customers = 12
+        num_customers = 8
         
         planned_route = obs[idx:idx+num_customers]
         idx += num_customers
@@ -119,7 +124,7 @@ class NearestNeighborPolicy:
         self.truck_y = 0
 
 
-def evaluate_policy(policy, env, num_episodes=100, policy_name="Policy"):
+def evaluate_policy(policy, env, num_episodes=1000, policy_name="Policy"):
     """Evaluate a policy and return metrics"""
     metrics = {
         'customers_served': [],
@@ -159,7 +164,7 @@ def evaluate_policy(policy, env, num_episodes=100, policy_name="Policy"):
                 metrics['late_deliveries'].append(info.get('late_deliveries', 0))
                 metrics['disrupted_violations'].append(info.get('disrupted_violations', 0))
                 metrics['rewards'].append(episode_reward)
-                service_rate = info.get('customers_served', 0) / 12
+                service_rate = info.get('customers_served', 0) / 8
                 metrics['service_rates'].append(service_rate)
                 break
     
@@ -185,7 +190,7 @@ def print_results(results):
     print(f"EVALUATION RESULTS: {results['policy_name']}")
     print("="*70)
     print(f"Episodes: {results['num_episodes']}")
-    print(f"Avg Customers Served: {results['avg_customers_served']:.2f} ± {results['std_customers_served']:.2f} / 12")
+    print(f"Avg Customers Served: {results['avg_customers_served']:.2f} ± {results['std_customers_served']:.2f} / 8")
     print(f"Service Rate: {results['avg_service_rate']:.1f}%")
     print(f"Avg Late Deliveries: {results['avg_late_deliveries']:.2f}")
     print(f"Avg Disrupted Violations: {results['avg_disrupted_violations']:.2f}")
@@ -209,8 +214,8 @@ def compare_policies(rl_results, baseline_results):
     )
     
     print(f"Customers Served Improvement: {improvement_customers:+.1f}%")
-    print(f"  RL: {rl_results['avg_customers_served']:.2f} / 12")
-    print(f"  Baseline: {baseline_results['avg_customers_served']:.2f} / 12")
+    print(f"  RL: {rl_results['avg_customers_served']:.2f} / 8")
+    print(f"  Baseline: {baseline_results['avg_customers_served']:.2f} / 8")
     
     print(f"\nReward Improvement: {improvement_reward:+.1f}%")
     print(f"  RL: {rl_results['avg_reward']:.2f}")
@@ -237,11 +242,11 @@ if __name__ == "__main__":
     print("Evaluating Nearest-Neighbor Baseline...")
     baseline_policy = NearestNeighborPolicy(env)
     print('Created NearestNeighborPolicy')
-    # baseline_results, baseline_metrics = evaluate_policy(
-    #     baseline_policy, env, num_episodes=100, policy_name="Nearest-Neighbor Baseline"
-    # )
+    baseline_results, baseline_metrics = evaluate_policy(
+        baseline_policy, env, num_episodes=1000, policy_name="Nearest-Neighbor Baseline"
+    )
     print('Printing results')
-    # print_results(baseline_results)
+    print_results(baseline_results)
     
     # ==================== EVALUATE RL POLICY ====================
     print("Evaluating RL Policy...")
@@ -250,7 +255,7 @@ if __name__ == "__main__":
     action_shape = env.action_space.shape or env.action_space.n
     
     model = Net(state_shape, action_shape)
-    model.load_state_dict(torch.load("cloud_policy_70rew_1_21_26_23_05_01.pth", map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load(sys.argv[1], map_location=torch.device('cpu')))
     print('Loaded RL model!\n')
     
     optim = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -271,7 +276,7 @@ if __name__ == "__main__":
     print_results(rl_results)
     
     # ==================== COMPARISON ====================
-    # compare_policies(rl_results, baseline_results)
+    compare_policies(rl_results, baseline_results)
     
     # ==================== SINGLE EPISODE VISUALIZATION ====================
     print("\nRunning single episode with RL policy for visualization...")

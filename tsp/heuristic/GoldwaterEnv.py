@@ -542,6 +542,7 @@ class GoldwaterEnv(gym.Env):
             if self.drone_with_truck:
                 if request['disrupted']:
                     reward -= 20
+                    self.disrupted_drone_deliveries += 1
                 self.planned_route.append(0)
                 self.drone_route.append(len(self.customers) + 1)
                 self.drone_with_truck = False
@@ -571,6 +572,7 @@ class GoldwaterEnv(gym.Env):
             route_valid, num_late = self._validate_route()
             # print('Done!', self.planned_route)
             self.served_customers = len(self.customers) - num_late
+            self.late_deliveries = num_late
             
             # Main reward: customers served on-time
             reward += self.served_customers * 10
@@ -607,10 +609,13 @@ class GoldwaterEnv(gym.Env):
         
         self._update_state()
         
+        is_full = self.request_idx == len(self.all_customers)
         return self.state, reward, done, False, {
             "action_mask": self._get_action_mask(),
             "served_customers": self.served_customers,
-            "disrupted_violations": self.disrupted_drone_deliveries
+            "disrupted_violations": self.disrupted_drone_deliveries,
+            "customers_served": self.served_customers if is_full else 0,
+            "late_deliveries": self.late_deliveries if is_full else 0
         }
     
     def _validate_route(self):
