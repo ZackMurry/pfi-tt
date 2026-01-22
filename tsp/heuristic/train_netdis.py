@@ -55,8 +55,9 @@ test_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('Networ
 print('Saving scenario to file')
 DisruptedScenario().export()
 
-import torch, numpy as np
-from torch import nn
+
+import torch.nn as nn
+import torch.nn.functional as F
 
 class Net(nn.Module):
     def __init__(self, state_shape, action_shape, device):
@@ -64,32 +65,66 @@ class Net(nn.Module):
         self.device = device
         input_dim = np.prod(state_shape)
         
-        self.model = nn.Sequential(
-            # Wider first layer to capture input complexity
-            nn.Linear(input_dim, 256), 
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.1),  # Light regularization
-            
-            # Maintain capacity
-            nn.Linear(256, 256), 
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.1),
-            
-            # Funnel down
-            nn.Linear(256, 128), 
-            nn.ReLU(inplace=True),
-            
-            # Output layer
-            nn.Linear(128, np.prod(action_shape))
-        )
-
+        # Feature extraction
+        self.fc1 = nn.Linear(input_dim, 256)
+        self.bn1 = nn.BatchNorm1d(256)
+        
+        # Processing layers with residual
+        self.fc2 = nn.Linear(256, 256)
+        self.bn2 = nn.BatchNorm1d(256)
+        
+        self.fc3 = nn.Linear(256, 256)
+        self.bn3 = nn.BatchNorm1d(256)
+        
+        # Decision layers
+        self.fc4 = nn.Linear(256, 128)
+        
+        # Output
+        self.fc_out = nn.Linear(128, np.prod(action_shape))
+        
+        self.dropout = nn.Dropout(0.15)  # Slightly higher
+        
     def forward(self, obs, state=None, info={}):
         if not isinstance(obs, torch.Tensor):
             obs = torch.tensor(obs, dtype=torch.float, device=self.device)
         else:
             obs = obs.to(self.device)
+        
         batch = obs.shape[0]
-        logits = self.model(obs.view(batch, -1))
+        x = obs.view(batch, -1)
+        
+        # Layer 1: Feature extraction
+        x = self.fc1(x)
+        if batch > 1:  # BatchNorm needs batch size > 1
+            x = self.bn1(x)
+        x = F.relu(x)
+        x = self.dropout(x)
+        
+        # Layer 2: Residual block 1
+        identity = x
+        x = self.fc2(x)
+        if batch > 1:
+            x = self.bn2(x)
+        x = F.relu(x)
+        x = self.dropout(x)
+        x = x + identity  # Residual
+        
+        # Layer 3: Residual block 2
+        identity = x
+        x = self.fc3(x)
+        if batch > 1:
+            x = self.bn3(x)
+        x = F.relu(x)
+        x = self.dropout(x)
+        x = x + identity  # Residual
+        
+        # Layer 4: Decision layer
+        x = self.fc4(x)
+        x = F.relu(x)
+        
+        # Output
+        logits = self.fc_out(x)
+        
         return logits, state
 
 env = FlattenObservation(GoldwaterEnv())

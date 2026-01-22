@@ -18,7 +18,7 @@ class GoldwaterEnv(gym.Env):
         # Configuration
         self.NUM_CUSTOMERS = num_customers
         self.DRONE_SPEED_FACTOR = 1.5  # Drones are faster than trucks
-        self.MAX_T = 240  # Maximum time horizon
+        self.MAX_T = 145  # Maximum time horizon
         self.MAX_X = 20
         self.MAX_Y = 20
         self.DISRUPTION_PROB = 0.2  # 20% of customers have network disruptions
