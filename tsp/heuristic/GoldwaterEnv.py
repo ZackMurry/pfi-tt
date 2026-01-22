@@ -540,9 +540,8 @@ class GoldwaterEnv(gym.Env):
         # todo: use 1 as drone action instead of 0
         if action == 0:  # Send drone
             if request['disrupted']:
-                reward -= 100
-                done = True
-            elif self.drone_with_truck:
+                reward -= 20
+            if self.drone_with_truck:
                 self.planned_route.append(0)
                 self.drone_route.append(len(self.customers) + 1)
                 self.drone_with_truck = False
