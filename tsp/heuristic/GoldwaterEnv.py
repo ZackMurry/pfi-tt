@@ -563,14 +563,13 @@ class GoldwaterEnv(gym.Env):
         
         # REMOVED: All the route time improvement reward shaping
         
-        # Validate route
-        route_valid, num_late = self._validate_route()
-        
         # Move to next customer
         self.request_idx += 1
         
         # Check if all customers processed
         if self.request_idx >= len(self.all_customers):
+            # Validate route
+            route_valid, num_late = self._validate_route()
             # print('Done!', self.planned_route)
             self.served_customers = len(self.customers) - num_late
             
