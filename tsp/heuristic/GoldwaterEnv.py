@@ -721,7 +721,7 @@ class GoldwaterEnv(gym.Env):
         # Pad and normalize routes
         planned = [p / (self.NUM_CUSTOMERS + 2) for p in self.planned_route]
         while len(planned) < self.max_queue:
-            planned.append(0.0)
+            planned.append(1.0)
         
         drone_r = [d / (self.NUM_CUSTOMERS + 1) for d in self.drone_route]
         while len(drone_r) < self.max_drone_queue:
