@@ -45,7 +45,7 @@ print(f"CUDA: {torch.cuda.is_available()}")
 # test_envs = ts.env.SubprocVectorEnv([lambda: gym.make('HeuristicTruckDroneEnv-v0') for _ in range(100)])
 
 train_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('NetworkDisruptionEnv-v0')) for _ in range(num_train_envs)])
-test_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('NetworkDisruptionEnv-v0')) for _ in range(1)])
+test_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('NetworkDisruptionEnv-v0')) for _ in range(4)])
 
 # train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTruckDroneEnv-v0')) for _ in range(num_train_envs)])
 # test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTruckDroneEnv-v0')) for _ in range(1)])
@@ -141,15 +141,26 @@ logger = TensorboardLogger(writer)
 def old_train_callback(epoch, env_step):
     policy.set_eps(0.1)
 
+# def train_callback(epoch, env_step):
+#     policy.train()
+#     if env_step < 15_000:
+#         eps = 0.25
+#     elif env_step < 250_000:  # ← Extended decay
+#         progress = (env_step - 15_000) / (250_000 - 15_000)
+#         eps = 0.15 - progress * 0.05  # Only decay to 0.10
+#     else:
+#         eps = 0.10  # ← Keep higher minimum
+    
+#     policy.set_eps(eps)
 def train_callback(epoch, env_step):
     policy.train()
     if env_step < 15_000:
         eps = 0.25
-    elif env_step < 250_000:  # ← Extended decay
-        progress = (env_step - 15_000) / (250_000 - 15_000)
-        eps = 0.15 - progress * 0.05  # Only decay to 0.10
+    elif env_step < 500_000:  # ← Extended decay
+        progress = (env_step - 15_000) / (500_000 - 15_000)
+        eps = 0.25 - progress * 0.20  # ← Decay to 0.05
     else:
-        eps = 0.10  # ← Keep higher minimum
+        eps = 0.05  # ← Lower minimum
     
     policy.set_eps(eps)
 
