@@ -1,3 +1,4 @@
+from typing import List
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -59,7 +60,8 @@ class GoldwaterEnv(gym.Env):
         self.max_queue = self.NUM_CUSTOMERS * 2
         self.max_drone_queue = self.NUM_CUSTOMERS + 1
         self.observation_space = spaces.Dict({
-            "planned_route": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 1] * self.max_queue),
+            "planned_route": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 2] * self.max_queue),
+            "heuristic": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 1] * self.NUM_CUSTOMERS),
             "drone_route": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 1] * self.max_drone_queue),
             "request": spaces.Dict({
                 "x": spaces.Discrete(self.MAX_X + 1),
@@ -270,7 +272,7 @@ class GoldwaterEnv(gym.Env):
         cust = self.all_customers[customer_idx]
         return cust['x'], cust['y']
     
-    def _build_nearest_neighbor_route(self):
+    def _build_nearest_neighbor_route(self) -> List[int]:
         """
         Build truck route using nearest-neighbor algorithm.
         Returns: (truck_route, rejected_customers)
@@ -297,7 +299,18 @@ class GoldwaterEnv(gym.Env):
                     best_dist = dist
             
             if best_idx is None:
-                break  # No more feasible customers
+                for idx in remaining:
+                    cust = self.all_customers[idx]
+                    dist = self._manhattan_distance(current_x, current_y, cust['x'], cust['y'])
+                    arrival_time = current_time + dist
+                    
+                    # Feasible if we can arrive before deadline
+                    if dist < best_dist:
+                        best_idx = idx
+                        best_dist = dist
+            if best_idx is None:
+                print('Failed to generate heuristic')
+                break
             
             truck_route.append(best_idx)
             remaining.remove(best_idx)
@@ -305,7 +318,7 @@ class GoldwaterEnv(gym.Env):
             current_x, current_y = self._get_customer_position(best_idx)
             current_time += best_dist
         
-        return truck_route, list(remaining)
+        return truck_route
     
     def _calculate_route_makespan(self, truck_route, drone_sorties=None):
         """
@@ -425,10 +438,10 @@ class GoldwaterEnv(gym.Env):
         
         Returns: (truck_route, drone_assignments, rejected_customers)
         """
-        truck_route, rejected = self._build_nearest_neighbor_route()
+        truck_route = self._build_nearest_neighbor_route()
         drone_assignments = []  # Heuristic doesn't use drones
         
-        return truck_route, drone_assignments, rejected
+        return truck_route, drone_assignments
     
     def _initialize_from_heuristic(self):
         """
@@ -436,13 +449,13 @@ class GoldwaterEnv(gym.Env):
         This represents the original route plan before disruptions were known.
         Builds planned_route where drone serves customers in parallel with truck.
         """
-        truck_route, drone_assignments, rejected = self._generate_heuristic_route()
+        truck_route, drone_assignments = self._generate_heuristic_route()
         
         # Store the initial plan for reference
         self.initial_plan = {
             'truck_route': truck_route.copy(),
             'drone_assignments': drone_assignments.copy(),
-            'rejected': rejected.copy()
+            # 'rejected': rejected.copy()
         }
         
         # Build planned_route with proper drone scheduling
@@ -489,11 +502,11 @@ class GoldwaterEnv(gym.Env):
         for idx in sorted(all_assigned):
             self.customers.append(self.all_customers[idx])
         
-        # Rejected customers
-        for idx in rejected:
-            self.rejected.append(self.all_customers[idx])
+        # # Rejected customers
+        # for idx in rejected:
+        #     self.rejected.append(self.all_customers[idx])
         
-        return truck_route, drone_assignments, rejected
+        return truck_route, drone_assignments
     
     def _get_travel_time(self, x, y, customer, is_drone=False):
         """Get travel time to customer"""
@@ -520,7 +533,7 @@ class GoldwaterEnv(gym.Env):
         #     self.rejected.append(request)
         #     reward -= 10 # Penalize pretty heavily
             
-        # todo: use 1 as drone action ninstead of 0
+        # todo: use 1 as drone action instead of 0
         if action == 0:  # Send drone
             if request['disrupted']:
                 reward -= 100
@@ -586,7 +599,7 @@ class GoldwaterEnv(gym.Env):
                     reward -= 10  # ← PENALTY, not reward!
                 else:  # >50% slower
                     reward -= 30  # ← BIG PENALTY
-                print('time reward: ', reward - og_reward)
+                # print('time reward: ', reward - og_reward)
             
             done = True
         
@@ -697,7 +710,7 @@ class GoldwaterEnv(gym.Env):
         # Pad routes
         planned = self.planned_route.copy()
         while len(planned) < self.max_queue:
-            planned.append(0)
+            planned.append(self.NUM_CUSTOMERS + 1)
         
         drone_r = self.drone_route.copy()
         while len(drone_r) < self.max_drone_queue:
@@ -709,6 +722,9 @@ class GoldwaterEnv(gym.Env):
         #     print('all len', len(self.all_customers))
         #     print(self.all_customers)
         
+        heuristic = self.initial_plan['truck_route'] if self.initial_plan else [0]*self.NUM_CUSTOMERS
+        print('heuristic', len(heuristic), heuristic)
+
         self.state = {
             "request": req,
             "customers": {
@@ -718,6 +734,7 @@ class GoldwaterEnv(gym.Env):
                 "disrupted": np.array(custs['disrupted'])
             },
             "planned_route": np.array(planned),
+            "heuristic": np.array(heuristic),
             "drone_route": np.array(drone_r),
             "customers_added": len(self.customers),
             "drone_out": self.planned_route.count(0) % 2
@@ -946,7 +963,6 @@ class GoldwaterEnv(gym.Env):
         stats_text = f"RL Performance:\n"
         stats_text += f"  On-time: {self.served_customers}/{self.NUM_CUSTOMERS}\n"
         stats_text += f"  Late: {self.late_deliveries}\n"
-        stats_text += f"  Rejected: {len(self.rejected)}\n"
         stats_text += f"  Drone Uses: {len(self.drone_route)}\n"
         if final_valid:
             stats_text += f"  Makespan: {final_makespan:.1f}\n"
@@ -955,7 +971,6 @@ class GoldwaterEnv(gym.Env):
         if self.initial_plan:
             stats_text += f"\n\nHeuristic Baseline:\n"
             stats_text += f"  Served: {initial_served}/{self.NUM_CUSTOMERS}\n"
-            stats_text += f"  Rejected: {len(self.initial_plan['rejected'])}\n"
             stats_text += f"  Drone Uses: {len(self.initial_plan['drone_assignments'])}"
         
         ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
