@@ -52,12 +52,8 @@ test_envs = ts.env.SubprocVectorEnv([lambda: FlattenObservation(gym.make('Networ
 # train_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(num_train_envs)])
 # test_envs = ts.env.DummyVectorEnv([lambda: FlattenObservation(gym.make('HeuristicTSPEnv-v0')) for _ in range(1)])
 
-print('Saving scenario to file')
-DisruptedScenario().export()
-
-
-import torch.nn as nn
-import torch.nn.functional as F
+import torch, numpy as np
+from torch import nn
 
 class Net(nn.Module):
     def __init__(self, state_shape, action_shape, device):
@@ -65,76 +61,43 @@ class Net(nn.Module):
         self.device = device
         input_dim = np.prod(state_shape)
         
-        # Feature extraction
-        self.fc1 = nn.Linear(input_dim, 256)
-        self.bn1 = nn.BatchNorm1d(256)
-        
-        # Processing layers with residual
-        self.fc2 = nn.Linear(256, 256)
-        self.bn2 = nn.BatchNorm1d(256)
-        
-        self.fc3 = nn.Linear(256, 256)
-        self.bn3 = nn.BatchNorm1d(256)
-        
-        # Decision layers
-        self.fc4 = nn.Linear(256, 128)
-        
-        # Output
-        self.fc_out = nn.Linear(128, np.prod(action_shape))
-        
-        self.dropout = nn.Dropout(0.15)  # Slightly higher
-        
+        self.model = nn.Sequential(
+            # Wider first layer to capture input complexity
+            nn.Linear(input_dim, 256), 
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),  # Light regularization
+            
+            # Maintain capacity
+            nn.Linear(256, 256), 
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            
+            # Funnel down
+            nn.Linear(256, 128), 
+            nn.ReLU(inplace=True),
+            
+            # Output layer
+            nn.Linear(128, np.prod(action_shape))
+        )
+
     def forward(self, obs, state=None, info={}):
         if not isinstance(obs, torch.Tensor):
             obs = torch.tensor(obs, dtype=torch.float, device=self.device)
         else:
             obs = obs.to(self.device)
-        
         batch = obs.shape[0]
-        x = obs.view(batch, -1)
-        
-        # Layer 1: Feature extraction
-        x = self.fc1(x)
-        if batch > 1:  # BatchNorm needs batch size > 1
-            x = self.bn1(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        
-        # Layer 2: Residual block 1
-        identity = x
-        x = self.fc2(x)
-        if batch > 1:
-            x = self.bn2(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        x = x + identity  # Residual
-        
-        # Layer 3: Residual block 2
-        identity = x
-        x = self.fc3(x)
-        if batch > 1:
-            x = self.bn3(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        x = x + identity  # Residual
-        
-        # Layer 4: Decision layer
-        x = self.fc4(x)
-        x = F.relu(x)
-        
-        # Output
-        logits = self.fc_out(x)
-        
+        logits = self.model(obs.view(batch, -1))
         return logits, state
+
 
 env = FlattenObservation(GoldwaterEnv())
 # env = FlattenObservation(HeuristicTSPEnv())
 
 state_shape = env.observation_space.shape or env.observation_space.n
-print(f'State shape: {state_shape}')
+# print(f'State shape: {state_shape}')
 action_shape = env.action_space.shape or env.action_space.n
-print(f"action shape: {action_shape}")
-print(f"np.prod: {np.prod(action_shape)}")
+# print(f"action shape: {action_shape}")
+# print(f"np.prod: {np.prod(action_shape)}")
 
 # 1. Check if CUDA is available and set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -150,8 +113,8 @@ print(f"Model on GPU: {next(net.parameters()).is_cuda}")
 optim = torch.optim.Adam(net.parameters(), lr=1e-4)
 
 # policy  = ts.policy.PPOPolicy(
-print(f"action space: {env.action_space}")
-print(f"sample: {env.action_space.sample()}")
+# print(f"action space: {env.action_space}")
+# print(f"sample: {env.action_space.sample()}")
 policy = ts.policy.DQNPolicy(
     model=net,
     optim=optim,
@@ -226,7 +189,7 @@ try:
         step_per_collect=64,
         max_epoch=400,
         step_per_epoch=20000,
-        episode_per_test=100,
+        episode_per_test=500,
         # episode_per_test=100, 
         update_per_step=0.1, batch_size=128,
         train_fn=train_callback,
