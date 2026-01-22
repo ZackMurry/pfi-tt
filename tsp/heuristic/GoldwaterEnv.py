@@ -60,24 +60,28 @@ class GoldwaterEnv(gym.Env):
         self.max_queue = self.NUM_CUSTOMERS * 2
         self.max_drone_queue = self.NUM_CUSTOMERS + 1
         self.observation_space = spaces.Dict({
-            "planned_route": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 2] * self.max_queue),
-            "heuristic": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 1] * self.NUM_CUSTOMERS),
-            "drone_route": spaces.MultiDiscrete([self.NUM_CUSTOMERS + 1] * self.max_drone_queue),
+            # Routes: normalized indices (0-1)
+            "planned_route": spaces.Box(low=0.0, high=1.0, shape=(self.max_queue,), dtype=np.float32),
+            "heuristic": spaces.Box(low=0.0, high=1.0, shape=(self.NUM_CUSTOMERS,), dtype=np.float32),
+            "drone_route": spaces.Box(low=0.0, high=1.0, shape=(self.max_drone_queue,), dtype=np.float32),
+            # Current request: all normalized (0-1)
             "request": spaces.Dict({
-                "x": spaces.Discrete(self.MAX_X + 1),
-                "y": spaces.Discrete(self.MAX_Y + 1),
-                "deadline": spaces.Discrete(self.MAX_T + 1),
-                "disrupted": spaces.Discrete(2)
+                "x": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                "y": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                "deadline": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                "disrupted": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)  # Still 0 or 1
             }),
+            # All customers: normalized (0-1)
             "customers": spaces.Dict({
-                "x": spaces.MultiDiscrete([self.MAX_X + 1] * self.NUM_CUSTOMERS),
-                "y": spaces.MultiDiscrete([self.MAX_Y + 1] * self.NUM_CUSTOMERS),
-                "deadline": spaces.MultiDiscrete([self.MAX_T + 1] * self.NUM_CUSTOMERS),
-                "disrupted": spaces.MultiDiscrete([2] * self.NUM_CUSTOMERS)
+                "x": spaces.Box(low=0.0, high=1.0, shape=(self.NUM_CUSTOMERS,), dtype=np.float32),
+                "y": spaces.Box(low=0.0, high=1.0, shape=(self.NUM_CUSTOMERS,), dtype=np.float32),
+                "deadline": spaces.Box(low=0.0, high=1.0, shape=(self.NUM_CUSTOMERS,), dtype=np.float32),
+                "disrupted": spaces.Box(low=0.0, high=1.0, shape=(self.NUM_CUSTOMERS,), dtype=np.float32)
             }),
-            "customers_added": spaces.Discrete(self.NUM_CUSTOMERS + 1),
-            "drone_out": spaces.Discrete(2)
+            "customers_added": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32), # Customer count: normalized (0-1)
+            "drone_out": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32) # Drone status: binary (0 or 1)
         })
+        
         # print(self.observation_space)
         
         # Define action space: drone (0) or insert at position [1, n]
@@ -693,53 +697,57 @@ class GoldwaterEnv(gym.Env):
         else:
             req = {"x": 0, "y": 0, "deadline": 0, "disrupted": 0}
         
-        # Pad customer arrays
+        # Pad customer arrays - WITH NORMALIZATION
         custs = {"x": [], "y": [], "deadline": [], "disrupted": []}
         for cust in self.customers:
-            custs['x'].append(cust['x'])
-            custs['y'].append(cust['y'])
-            custs['deadline'].append(cust['deadline'])
-            custs['disrupted'].append(cust['disrupted'])
+            custs['x'].append(cust['x'] / self.MAX_X)
+            custs['y'].append(cust['y'] / self.MAX_Y)
+            custs['deadline'].append(cust['deadline'] / self.MAX_T)
+            custs['disrupted'].append(float(cust['disrupted']))
         
         while len(custs['x']) < self.NUM_CUSTOMERS:
-            custs['x'].append(0)
-            custs['y'].append(0)
-            custs['deadline'].append(0)
-            custs['disrupted'].append(0)
+            custs['x'].append(0.0)
+            custs['y'].append(0.0)
+            custs['deadline'].append(0.0)
+            custs['disrupted'].append(0.0)
         
-        # Pad routes
-        planned = self.planned_route.copy()
+        # Normalize heuristic route
+        heuristic = []
+        if self.initial_plan and 'truck_route' in self.initial_plan:
+            for idx in self.initial_plan['truck_route']:
+                heuristic.append((idx + 1) / (self.NUM_CUSTOMERS + 1))
+        while len(heuristic) < self.NUM_CUSTOMERS:
+            heuristic.append(0.0)
+        
+        # Pad and normalize routes
+        planned = [p / (self.NUM_CUSTOMERS + 2) for p in self.planned_route]
         while len(planned) < self.max_queue:
-            planned.append(self.NUM_CUSTOMERS + 1)
+            planned.append(0.0)
         
-        drone_r = self.drone_route.copy()
+        drone_r = [d / (self.NUM_CUSTOMERS + 1) for d in self.drone_route]
         while len(drone_r) < self.max_drone_queue:
-            drone_r.append(0)
-        # print('len', len(drone_r), len(self.customers), len(custs['x']))
-        # if len(self.customers) > self.NUM_CUSTOMERS:
-        #     print('too many custs!')
-        #     print(self.customers)
-        #     print('all len', len(self.all_customers))
-        #     print(self.all_customers)
+            drone_r.append(0.0)
         
-        heuristic = self.initial_plan['truck_route'] if self.initial_plan else [0]*self.NUM_CUSTOMERS
-        # print('heuristic', len(heuristic), heuristic)
-
         self.state = {
-            "request": req,
-            "customers": {
-                "x": np.array(custs['x']),
-                "y": np.array(custs['y']),
-                "deadline": np.array(custs['deadline']),
-                "disrupted": np.array(custs['disrupted'])
+            "request": {
+                "x": np.array([req['x'] / self.MAX_X], dtype=np.float32),
+                "y": np.array([req['y'] / self.MAX_Y], dtype=np.float32),
+                "deadline": np.array([req['deadline'] / self.MAX_T], dtype=np.float32),
+                "disrupted": np.array([float(req['disrupted'])], dtype=np.float32)
             },
-            "planned_route": np.array(planned),
-            "heuristic": np.array(heuristic),
-            "drone_route": np.array(drone_r),
-            "customers_added": len(self.customers),
-            "drone_out": self.planned_route.count(0) % 2
+            "customers": {
+                "x": np.array(custs['x'], dtype=np.float32),
+                "y": np.array(custs['y'], dtype=np.float32),
+                "deadline": np.array(custs['deadline'], dtype=np.float32),
+                "disrupted": np.array(custs['disrupted'], dtype=np.float32)
+            },
+            "heuristic": np.array(heuristic, dtype=np.float32),
+            "planned_route": np.array(planned, dtype=np.float32),
+            "drone_route": np.array(drone_r, dtype=np.float32),
+            "customers_added": np.array([len(self.customers) / self.NUM_CUSTOMERS], dtype=np.float32),
+            "drone_out": np.array([float(not self.drone_with_truck)], dtype=np.float32)
         }
-    
+        
     def _estimate_heuristic_time(self):
         """Calculate makespan of heuristic baseline route"""
         if not self.initial_plan:
