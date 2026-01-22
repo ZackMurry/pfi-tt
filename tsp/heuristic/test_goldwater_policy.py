@@ -237,11 +237,11 @@ if __name__ == "__main__":
     print("Evaluating Nearest-Neighbor Baseline...")
     baseline_policy = NearestNeighborPolicy(env)
     print('Created NearestNeighborPolicy')
-    baseline_results, baseline_metrics = evaluate_policy(
-        baseline_policy, env, num_episodes=100, policy_name="Nearest-Neighbor Baseline"
-    )
+    # baseline_results, baseline_metrics = evaluate_policy(
+    #     baseline_policy, env, num_episodes=100, policy_name="Nearest-Neighbor Baseline"
+    # )
     print('Printing results')
-    print_results(baseline_results)
+    # print_results(baseline_results)
     
     # ==================== EVALUATE RL POLICY ====================
     print("Evaluating RL Policy...")
@@ -250,7 +250,7 @@ if __name__ == "__main__":
     action_shape = env.action_space.shape or env.action_space.n
     
     model = Net(state_shape, action_shape)
-    model.load_state_dict(torch.load("netdis_policy.pth", map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load("cloud_policy_70rew_1_21_26_23_05_01.pth", map_location=torch.device('cpu')))
     print('Loaded RL model!\n')
     
     optim = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -271,7 +271,7 @@ if __name__ == "__main__":
     print_results(rl_results)
     
     # ==================== COMPARISON ====================
-    compare_policies(rl_results, baseline_results)
+    # compare_policies(rl_results, baseline_results)
     
     # ==================== SINGLE EPISODE VISUALIZATION ====================
     print("\nRunning single episode with RL policy for visualization...")
