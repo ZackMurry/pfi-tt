@@ -189,7 +189,7 @@ try:
         # max_epoch=60, 
         # step_per_epoch=10000,
         step_per_collect=64,
-        max_epoch=300,
+        max_epoch=400,
         step_per_epoch=10000,
         episode_per_test=100,
         # episode_per_test=100, 
