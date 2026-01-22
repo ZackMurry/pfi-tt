@@ -549,8 +549,8 @@ class GoldwaterEnv(gym.Env):
                 self.customers.append(request)
                 # REMOVED: reward += 2
             else:
-                if len(self.planned_route) > 0 and self.planned_route[-1] == 0:
-                    reward -= 5
+                # if len(self.planned_route) > 0 and self.planned_route[-1] == 0:
+                #     reward -= 5
                 self.planned_route.append(0)
                 self.drone_with_truck = True
                 self.request_idx -= 1 # Don't move to next customer
@@ -558,7 +558,7 @@ class GoldwaterEnv(gym.Env):
         else:  # Add to truck route
             insert_pos = min(action, len(self.planned_route) + 1)
             self.planned_route.insert(insert_pos - 1, len(self.customers) + 1)
-            self.customers.insert(insert_pos - 1, request)
+            self.customers.append(request)
             # reward += 1.0
         
         # REMOVED: All the route time improvement reward shaping
