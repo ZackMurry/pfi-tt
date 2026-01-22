@@ -723,7 +723,7 @@ class GoldwaterEnv(gym.Env):
         #     print(self.all_customers)
         
         heuristic = self.initial_plan['truck_route'] if self.initial_plan else [0]*self.NUM_CUSTOMERS
-        print('heuristic', len(heuristic), heuristic)
+        # print('heuristic', len(heuristic), heuristic)
 
         self.state = {
             "request": req,
